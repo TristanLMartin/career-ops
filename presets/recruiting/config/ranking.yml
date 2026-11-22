@@ -25,6 +25,15 @@ target:
   always_companies: []
 
 auto_score_per_day: 0
+# A picker by title words instead of level keys (scripts/hunt-autoscore.mjs pickWithProfile):
+# auto_score_picker:
+#   title_include: [recruiter, recruiting, sourcer, "talent acquisition", "talent partner", "TA partner"]
+#   location_tiers: [1, 2]
+#   exclude_titles: [scheduler]          # skipped unless their quick score is exclude_unless_quick
+#   exclude_companies: [RPO]             # e.g. recruitment-process-outsourcing agencies
+#   exclude_unless_quick: 5
+#   contract_factor: 0.9                 # contract roles kept but ranked a little lower
+#   per_company: 2
 top_picks: { min_fit: 3.8, min_level: 0.6, per_company: 2, limit: 10 }
 shortlist: { min_relevance: 35 }
 

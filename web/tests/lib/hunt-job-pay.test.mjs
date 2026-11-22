@@ -45,7 +45,7 @@ test("payLine: estimate only, low confidence is labeled", () => {
 
 test("payLine: OTE, hourly and non-USD bands keep their basis", () => {
   assert.equal(payLine({ pay: { min: 220000, max: 288000, annualMin: 220000, annualMax: 288000, currency: "USD", period: "year", basis: "OTE" } }).posted, "OTE $220k–$288k · posted");
-  assert.equal(payLine({ pay: { min: 60, max: 75, annualMin: 124800, annualMax: 156000, currency: "USD", period: "hour", basis: "base" } }).posted, "Base $60–$75/hr · posted");
+  assert.equal(payLine({ pay: { min: 60, max: 75, annualMin: 124800, annualMax: 156000, currency: "USD", period: "hour", basis: "base" } }).posted, "Base $60–$75/hr (hourly, ~$125k–$156k/yr) · posted");
   assert.equal(payLine({ pay: { min: 150000, max: 150000, annualMin: 150000, annualMax: 150000, currency: "CAD", period: "year", basis: "base" } }).posted, "Base $150k CAD · posted");
 });
 

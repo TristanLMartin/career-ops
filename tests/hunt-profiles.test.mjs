@@ -13,6 +13,8 @@ import { newProfile } from "../scripts/hunt-new-profile.mjs";
 import { useLegacyRules } from "./helpers/swe-legacy-rules.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// The default profile's own person.yml + profile.yml are personal and never shipped.
+const HAS_PERSON = fs.existsSync(path.join(ROOT, "config", "person.yml")) && fs.existsSync(path.join(ROOT, "config", "profile.yml"));
 
 test("default profile = the checkout, at today's exact paths", () => {
   assert.equal(profileDir({}), ROOT);
@@ -116,4 +118,28 @@ test("autoscore: auto_score_per_day 0 picks nothing (a new profile spends nothin
   const jobs = { u: { source: "inbox", fit: null, composite: 90, level: { key: "senior" }, locationTier: 1, company: "A", role: "R" } };
   assert.deepEqual(pickCandidates(jobs, { count: 0 }), []);
   assert.equal(pickCandidates(jobs, { count: 1 }).length, 1);
+});
+
+// Target roles, floor and location come from config/profile.yml (the evaluator's file).
+test("targetsLine reads roles, floor (with the straddle rule) and location from profile.yml", async () => {
+  const { targetsLine } = await import("../lib/profile-paths.mjs");
+  const line = targetsLine({ target_roles: { primary: ["Forward Deployed Engineer", "Senior Backend Engineer"] }, compensation: { minimum: "200000", location_flexibility: "Seattle or remote US" } });
+  assert.match(line, /target roles: Forward Deployed Engineer, Senior Backend Engineer/);
+  assert.match(line, /base floor \$200k, met when the TOP of a posted band reaches it/);
+  assert.match(line, /location: Seattle or remote US/);
+  assert.equal(targetsLine({ compensation: { minimum: "" } }), "");
+  if (!HAS_PERSON) return; // the readPerson checks need the personal config/person.yml + profile.yml
+  const p = readPerson(ROOT);
+  assert.match(p.quick_context, /Targets \(config\/profile\.yml\)/);
+  assert.match(p.h2h_preferences, /- Targets \(config\/profile\.yml\)/);
+});
+
+test("no drift: every profile's person.yml base_floor matches its profile.yml compensation.minimum", async () => {
+  const { profileFloor, readProfileYml } = await import("../lib/profile-paths.mjs");
+  const dirs = [ROOT, ...fs.readdirSync(path.join(ROOT, "profiles")).filter((d) => !d.startsWith("_")).map((d) => path.join(ROOT, "profiles", d))];
+  for (const dir of dirs) {
+    const person = readPerson(dir);
+    const floor = profileFloor(readProfileYml(dir));
+    if (person.base_floor && floor) assert.equal(Number(person.base_floor), floor, `${path.relative(ROOT, dir) || "default"}: person.yml base_floor vs profile.yml compensation.minimum`);
+  }
 });

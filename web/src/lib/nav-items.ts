@@ -1,4 +1,4 @@
-import { LayoutDashboard, Compass, ListChecks, Send, Radar, BarChart3, FileText, Files, Settings, CalendarClock, Mail, Bot, GraduationCap, Sheet } from "lucide-react";
+import { LayoutDashboard, Compass, ListChecks, Radar, BarChart3, FileText, Files, Settings, CalendarClock, Mail, Bot, GraduationCap, Sheet } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 // Single source of truth for the app's primary destinations — shared by the
@@ -12,13 +12,12 @@ export type NavItem = {
   more?: boolean;
 };
 
-// hunt: Home, Jobs, Tracker, Messages, Follow-ups and Study up front; everything else under "More".
+// hunt: Home, Jobs, Tracker, Inbox and Study up front; everything else under "More".
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/pipeline", label: "Jobs", icon: ListChecks },
   { href: "/tracker", label: "Tracker", icon: Sheet }, // hunt: every job in flight, spreadsheet-style
-  { href: "/messages", label: "Messages", icon: Mail }, // hunt: Job Hunt mail threads (Apps Script feed)
-  { href: "/followups", label: "Follow-ups", icon: Send }, // hunt: top-level, right under Messages
+  { href: "/inbox", label: "Inbox", icon: Mail }, // hunt: Messages + Follow-ups in one page (Needs my reply / Waiting on them)
   { href: "/study", label: "Study", icon: GraduationCap }, // hunt: interview prep checklist + flashcards
   { href: "/explore", label: "Explore", icon: Compass, more: true },
   { href: "/scheduled-scans", label: "Scheduled scans", icon: CalendarClock, more: true },

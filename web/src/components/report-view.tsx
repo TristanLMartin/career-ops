@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ArrowLeft, FileText, ExternalLink, ChevronDown, Wallet } from "lucide-react";
 import type { Application } from "@/lib/career-ops";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +19,11 @@ import { CompanyLogo } from "@/components/company-logo";
 import { ScoreMethodology } from "@/components/score-methodology";
 import { ScoreLevers } from "@/components/score-levers";
 import { PrepPack } from "@/components/prep-pack";
-import { GeneratePdfButton } from "@/components/generate-pdf-button";
-import { CoverDraftButton } from "@/components/cover-draft-button";
+import { TailorApplyPanel } from "@/components/hunt/tailor-apply-panel"; // hunt
+import { coverSuggestions } from "@/lib/hunt-tailor.mjs"; // hunt
+import { readDeepDives } from "@/lib/hunt-lite-eval.mjs"; // hunt: Deep dive state
+import { scopeEstimate } from "@/lib/hunt-scope-estimate"; // hunt
+import { careerOpsRoot } from "@/lib/career-ops"; // hunt
 import { ApplyButton } from "@/components/apply-button";
 import { MarkPdfReadyButton } from "@/components/mark-pdf-ready-button";
 import { DeleteFromTracker } from "@/components/delete-from-tracker";
@@ -59,6 +61,7 @@ export function ReportView({
   applyHref,
   reportNum = null,
   pay = null,
+  rankSlot = null,
 }: {
   id: string;
   app: Application | null;
@@ -81,6 +84,8 @@ export function ReportView({
   reportNum?: number | null;
   /** hunt: the pay line (lib/hunt-job-pay.mjs payLine), resolved by the page. */
   pay?: { kind: string; posted: string | null; estimated: string | null; text: string } | null;
+  /** hunt: Best overall rank and the collapsed "Why this rank", rendered by the page. */
+  rankSlot?: { rank: number | null; why: import("react").ReactNode } | null;
 }) {
   const meta = report ? parseReport(report) : null;
   const field = (label: string) => meta?.fields.find((f) => f.label === label)?.value;
@@ -93,6 +98,16 @@ export function ReportView({
   const recommended = verdict?.label === "Apply";
   const quietApply = applyCtaQuiet({ score, legitimacy: meta?.legitimacy });
   const applyUrl = applyPostingUrl(url, app?.url, app?.applyLink) || undefined;
+  // hunt: Deep dive shows for a lite report, or once a deep dive ran (to switch the score).
+  // A job whose report is already a full evaluation has nothing for it to add.
+  const deepFor = (u: string | undefined, scopeField: string | undefined) => {
+    if (!u) return undefined;
+    const entry = readDeepDives(careerOpsRoot())[u] ?? null;
+    if (!entry && !/^lite/i.test(String(scopeField ?? "").trim())) return undefined;
+    return { url: u, estUsd: scopeEstimate("deep"), entry };
+  };
+  // hunt: the posting URL the tracker row and Deep dive key on.
+  const deepUrl = [app?.url, url].find((u) => typeof u === "string" && /^https?:\/\//i.test(u));
   const disk = cvDiskState({ onDisk: pdfFileReady, trackerMarked: trackerMarkedPdf });
   const spend = reportSpendActions(Boolean(report));
   const company = app ? companyPresentation(app) : null;
@@ -108,7 +123,10 @@ export function ReportView({
       </BackLink>
 
       <header className="mt-5">
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-faint">#{id}</p>
+        <p className="font-mono text-xs uppercase tracking-[0.18em] text-faint">
+          {rankSlot?.rank != null && <span className="mr-3 font-semibold text-brand-text" title="Best overall rank">#{rankSlot.rank}</span>}
+          ID {id}
+        </p>
         <div className="mt-2 flex items-center gap-3">
           <CompanyLogo name={company?.logoName ?? meta?.title ?? `Report #${id}`} size={40} />
           <h1 className="font-display text-3xl tracking-tight text-landing">
@@ -152,6 +170,7 @@ export function ReportView({
         )}
         {/* hunt: who do I know here? LinkedIn people search, 1st/2nd degree */}
         <ReferralLinks company={app?.company || meta?.title} className="mt-2 text-xs print:hidden" />
+        {rankSlot?.why && <div className="mt-3 print:hidden">{rankSlot.why}</div>}
       </header>
 
       {report ? (
@@ -190,18 +209,7 @@ export function ReportView({
             const actions = (
               <div className="mt-4 flex flex-wrap items-center gap-2.5 print:hidden">
                 {app && <StatusSelect n={id} current={app.status} />}
-                {spend.generateCv && (
-                  <GeneratePdfButton n={id} company={app?.company || meta?.title || id} onDisk={disk.exists} />
-                )}
-                {app && report && <CoverDraftButton n={id} company={companyName} />}
-                {spend.checklist && applyHref && (
-                  <Link
-                    href={applyHref}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand-text max-sm:min-h-[44px]"
-                  >
-                    Apply checklist
-                  </Link>
-                )}
+                {/* hunt: tailored resume, cover letter and apply answers live in one panel below */}
                 <MarkPdfReadyButton reportNum={reportNum} ready={disk.exists} trackerMarked={trackerMarkedPdf} />
                 <ApplyButton n={id} url={applyUrl} company={companyName} pdfReady={applyPdfReady} quiet={quietApply} />
                 {coverReady && (
@@ -215,6 +223,19 @@ export function ReportView({
                   </a>
                 )}
                 {disk.note && <p className="basis-full text-sm text-muted">{disk.note}</p>}
+                {/* hunt: Tailor & apply (upstream's tailored CV run + real cover / apply modes, fact-gated) */}
+                {report && (
+                  <TailorApplyPanel
+                    n={id}
+                    reportNum={reportNum}
+                    company={app?.company || meta?.title || id}
+                    cvOnDisk={disk.exists}
+                    showCv={spend.generateCv}
+                    suggest={coverSuggestions(report)}
+                    applyHref={spend.checklist ? applyHref : undefined}
+                    deep={deepFor(deepUrl, field("Evaluation scope"))}
+                  />
+                )}
               </div>
             );
             if (sections.length === 0) {

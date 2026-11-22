@@ -48,6 +48,38 @@ export function findEnrichRow(jobs, ref) {
   return null;
 }
 
+/**
+ * findEnrichRow for many lookups (the Pipeline table): indexes the enrich rows once by
+ * normalized URL (their key, then group member URLs) and by tracker number. Same order as
+ * findEnrichRow: URL first, then the tracker number.
+ */
+export function enrichLookup(jobs) {
+  const byUrl = new Map();
+  const byTracker = new Map();
+  const entries = Object.entries(jobs && typeof jobs === "object" ? jobs : {});
+  for (const [url, row] of entries) {
+    const k = keyOf(url);
+    if (k && !byUrl.has(k)) byUrl.set(k, row);
+  }
+  for (const [, row] of entries) {
+    for (const u of row?.groupUrls ?? []) {
+      const k = keyOf(u);
+      if (k && !byUrl.has(k)) byUrl.set(k, row);
+    }
+    const t = row?.report?.tracker;
+    const n = t == null ? "" : String(t).replace(/^0+/, "");
+    if (n && !byTracker.has(n)) byTracker.set(n, row);
+  }
+  return (ref) => {
+    for (const u of ref?.urls ?? []) {
+      const hit = byUrl.get(keyOf(u));
+      if (hit) return hit;
+    }
+    const n = ref?.tracker == null ? "" : String(ref.tracker).replace(/^0+/, "");
+    return (n && byTracker.get(n)) || null;
+  };
+}
+
 const money = (n) => (n >= 1000 ? `$${Math.round(n / 1000)}k` : `$${Math.round(n)}`);
 
 function band(lo, hi, suffix = "") {
@@ -77,7 +109,10 @@ export function payLine(row) {
   if (p && Number.isFinite(p.min) && Number.isFinite(p.max)) {
     const label = p.basis === "OTE" ? "OTE" : "Base";
     const cur = p.currency && p.currency !== "USD" ? ` ${p.currency}` : "";
-    const fig = p.period === "hour" ? band(p.min, p.max, "/hr") : band(p.annualMin ?? p.min, p.annualMax ?? p.max);
+    // Hourly pay is labeled as hourly, with its annualized figure (x2080) beside it.
+    const fig = p.period === "hour"
+      ? `${band(p.min, p.max, "/hr")} (hourly${Number.isFinite(p.annualMin) ? `, ~${band(p.annualMin, p.annualMax ?? p.annualMin, "/yr")}` : ""})`
+      : band(p.annualMin ?? p.min, p.annualMax ?? p.max);
     posted = `${label} ${fig}${cur} · posted`;
   } else {
     const adv = parseAdvertised(row?.report?.advertisedComp);

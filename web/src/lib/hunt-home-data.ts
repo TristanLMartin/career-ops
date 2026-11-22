@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { careerOpsRoot, readApplications, readApplicationStatusLog } from "@/lib/career-ops";
-import { readFollowupRows, readThreadRows, readHuntEnrichment } from "@/lib/hunt-data";
+import { readFollowupRows, readInbox, readThreadRows, readHuntEnrichment } from "@/lib/hunt-data";
 import { parseStatusLog, trackerRows } from "@/lib/hunt-tracker.mjs";
 import { homeSections, lastVisitFrom } from "@/lib/hunt-home-v2.mjs";
 
@@ -25,5 +25,8 @@ export function loadHomeSections(root: string = careerOpsRoot()) {
   const tracker = trackerRows(applications, parseStatusLog(logText), enrich.jobs);
   const { rows: threads } = readThreadRows(root);
   const followups = readFollowupRows(root, threads);
-  return { root, enrich, applications, ...homeSections({ tracker, threads, followups, jobs: enrich.jobs, firstSeen: readFirstSeen(root), lastVisit: readLastVisit(root) }) };
+  // "Needs you" is the Inbox's "Needs my reply" (plus new top postings), so the two agree.
+  let inboxNeeds: unknown[] | null = null;
+  try { inboxNeeds = readInbox(root).needs; } catch { /* fall back to the older per-thread rows */ }
+  return { root, enrich, applications, ...homeSections({ tracker, threads, followups, jobs: enrich.jobs, firstSeen: readFirstSeen(root), lastVisit: readLastVisit(root), inboxNeeds }) };
 }

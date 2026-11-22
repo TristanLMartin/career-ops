@@ -38,7 +38,7 @@ export type HuntEnrichment = {
   /** Level key from the profile's ladder (built-in IC ladder: senior, mid, dual, stretch, staff, staffplus). */
   level?: { key: string; label: string; factor: number } | null;
   fit: number | null;
-  report?: { n: string | null; tracker: string; decision: string; why: string; gap: string; strength: string; nextAction: string } | null;
+  report?: { n: string | null; tracker: string; decision: string; why: string; gap: string; strength: string; nextAction: string; level?: { meets: boolean; why: string } | null } | null;
   source?: "inbox" | "tracker";
   /** Duplicate group: company + base title. The leader is the best-ranked member. */
   group?: string;
@@ -59,6 +59,18 @@ export type HuntEnrichment = {
   parts: Record<"fit" | "relevance" | "pay" | "location" | "benefits" | "level", number | null> & { company?: number | null };
   /** Estimated total comp from config/comp.json (company senior TC, scaled by this posting's base). */
   tc_est?: { usd: number; rankUsd: number; basis: string; confidence: "low" | "medium" | "high"; range: [number, number] | null; equityType: string | null; levelEquiv?: string | null; privateEquity: boolean; homeAdjusted: boolean; source: string };
+  /** hunt: board posting date (YYYY-MM-DD) and its age in days (hunt-job-signals.mjs). */
+  postedAt?: string;
+  postedDays?: number;
+  /** hunt: the user's own 1-5 rating (data/hunt-ratings.json) and its note. */
+  my_rating?: number;
+  my_rating_note?: string;
+  /** An inferred rating (from a chat comment): shown as a note, never used for rank. */
+  my_rating_said?: string;
+  /** hunt: the posting URL answered expired (data/hunt-liveness.json). */
+  closed?: boolean;
+  /** hunt: the date the posting last answered live (data/hunt-liveness.json). */
+  liveAt?: string;
   /** Posted USD base band tops out below config/ranking.yml base_floor. */
   belowFloor?: boolean;
   /** The base_floor that belowFloor was judged against. */
@@ -83,6 +95,13 @@ export type HuntEnrichment = {
   fitFrom?: string;
   /** Sonnet head-to-head Borda rank (data/hunt-h2h.json), 1 = best; h2hVia "group" when inherited. */
   h2h_rank?: number;
+  /** hunt: the one canonical Rank (#N), lib/hunt-rank-order.mjs; set by the page that reads the jobs. */
+  rankNo?: number | null;
+  /** hunt: how many more jobs at this company Best overall moved below its top 20 (set with rankNo). */
+  moreAt?: number | null;
+  /** hunt: annual USD the Highest pay sort uses (est. TC or posted base), set with rankNo. */
+  payUsd?: number | null;
+  payKind?: string | null;
   h2hVia?: "group";
   h2hWhy?: string;
   /** Research-list company factor (config/ranking.yml research_tier). */

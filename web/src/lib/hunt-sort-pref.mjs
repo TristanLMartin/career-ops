@@ -4,12 +4,13 @@
  * own key so the upstream "fit"/"newest" preference stays untouched.
  */
 export const HUNT_SORT_STORAGE_KEY = "hunt:inbox-sort";
-export const HUNT_SORT_MODES = Object.freeze(["rank", "fit", "newest"]);
+// rank = Best overall (the # everywhere), fit = Best fit, pay = Highest pay, newest = first seen.
+export const HUNT_SORT_MODES = Object.freeze(["rank", "fit", "pay", "newest"]);
 export const DEFAULT_HUNT_SORT = "rank";
 export const HUNT_RANK_KEY_STORAGE = "hunt:inbox-rank-key";
 export const HUNT_RANK_KEYS = Object.freeze(["true", "composite", "fit", "level", "relevance", "pay", "location", "benefits"]);
 
-/** @returns {"rank" | "fit" | "newest"} */
+/** @returns {"rank" | "fit" | "pay" | "newest"} */
 export function parseHuntSort(value) {
   return HUNT_SORT_MODES.includes(/** @type {string} */ (value)) ? /** @type {any} */ (value) : DEFAULT_HUNT_SORT;
 }

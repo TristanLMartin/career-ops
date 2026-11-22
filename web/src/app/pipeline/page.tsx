@@ -6,9 +6,15 @@ import { PipelineView } from "@/components/pipeline-view";
 import { pipelineTab } from "@/lib/pipeline-navigation.mjs";
 import { scorePosting } from "@/lib/core/inbox-rank.mjs";
 import { applyInboxFit, loadFitTargets } from "@/lib/inbox-fit-profile.mjs";
-import { readHuntEnrichment } from "@/lib/hunt-data"; // hunt: rank badges
+import { readRankSettings, readHuntEnrichment } from "@/lib/hunt-data"; // hunt: rank badges
+import { moreAtMap, payCell, payValue, rankCaption, rankMap } from "@/lib/hunt-rank-order.mjs"; // hunt: Best overall
+import { enrichLookup } from "@/lib/hunt-job-pay.mjs"; // hunt: Pay column
 import { AddJobBox } from "@/components/hunt/add-job-box"; // hunt
 import { JobsViewToggle } from "@/components/hunt/jobs-view-toggle"; // hunt: List | Map
+import { InProgressLane, type InProgressRow } from "@/components/hunt/in-progress-lane"; // hunt: pinned lane
+import { readApplicationStatusLog } from "@/lib/career-ops";
+import { parseStatusLog, trackerRows } from "@/lib/hunt-tracker.mjs";
+import { inProgress } from "@/lib/hunt-home-v2.mjs";
 
 export const dynamic = "force-dynamic"; // always read fresh local files
 
@@ -23,7 +29,28 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
   const pending = pendingInbox(inbox);
   // hunt: fit-scored Shortlist postings leave the pending inbox once evaluated, but the
   // Shortlist ranks scored roles first, so they rejoin the triage list (marked done).
-  const enrich = onInbox ? readHuntEnrichment().jobs : {};
+  // hunt: Best overall (#N) for both tabs: inbox cards and tracker rows.
+  const enrich = readHuntEnrichment().jobs;
+  const rankSet = readRankSettings();
+  const ranks = rankMap(enrich);
+  const moreAt = moreAtMap(enrich); // hunt: "+N more at Company" under the top-20 cap
+  const hasTournament = Object.values(enrich).some((e) => e?.h2h_rank != null && e?.h2hVia !== "group");
+  const caption = rankCaption(rankSet, { tournament: hasTournament });
+  const appRanks: Record<string, number> = {};
+  for (const [url, e] of Object.entries(enrich)) {
+    const n = e?.report?.tracker;
+    const r = ranks.get(url);
+    if (n != null && r != null && (appRanks[String(n)] == null || r < appRanks[String(n)])) appRanks[String(n)] = r;
+  }
+  // hunt: the tracker table's Pay column, from the same enrich row the job page reads.
+  const appPay: Record<string, ReturnType<typeof payCell>> = {};
+  if (!onInbox) {
+    const lookup = enrichLookup(enrich);
+    for (const a of applications) {
+      const e = lookup({ urls: [a.url], tracker: a.n });
+      if (e) appPay[String(a.n)] = payCell(e);
+    }
+  }
   const pendingUrls = new Set(pending.map((j) => j.url));
   const seenScored = new Set<string>();
   const scoredShortlist = onInbox
@@ -36,7 +63,20 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
     : [];
   const fitted = onInbox ? withInboxFit([...pending, ...scoredShortlist]) : null;
   if (fitted) {
-    fitted.jobs = fitted.jobs.map((job) => ({ ...job, hunt: enrich[job.url] ?? null }));
+    // hunt: a posting whose URL answered expired is Closed and leaves the Jobs list.
+    fitted.jobs = fitted.jobs.filter((job) => !enrich[job.url]?.closed).map((job) => {
+      const e = enrich[job.url];
+      if (!e) return { ...job, hunt: null };
+      const pv = payValue(e, rankSet);
+      return { ...job, hunt: { ...e, rankNo: ranks.get(job.url) ?? null, moreAt: moreAt.get(job.url) ?? null, payUsd: pv?.usd ?? null, payKind: pv?.kind ?? null } };
+    });
+  }
+  // hunt: the "In progress" lane pinned above the ranked Jobs list (Applied … Offer).
+  let progress: InProgressRow[] = [];
+  if (onInbox) {
+    let logText = "";
+    try { logText = readApplicationStatusLog() ?? ""; } catch { /* dates fall back to the tracker */ }
+    progress = inProgress(trackerRows(summary.applications, parseStatusLog(logText), enrich)) as InProgressRow[];
   }
   const trackerShape = readTrackerShape();
   // Tracker row numbers whose tailored CV is indexed (data/pdf-index.tsv) AND on
@@ -58,6 +98,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
   return (
     <Suspense>
       <div className="mx-auto flex max-w-3xl justify-end px-4 pt-6 sm:px-6"><JobsViewToggle active="list" /></div>
+      {onInbox && <InProgressLane rows={progress} />}
       {onInbox && <div className="mx-auto max-w-3xl px-4 pt-3 sm:px-6"><AddJobBox /></div>}
       <PipelineView
         applications={applications}
@@ -66,6 +107,9 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
         inboxFitError={fitted?.error ?? null}
         trackerShape={trackerShape}
         cvRows={cvRows}
+        appRanks={appRanks}
+        appPay={appPay}
+        rankCaption={caption}
       />
     </Suspense>
   );

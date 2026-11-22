@@ -11,6 +11,7 @@
  * spawnFn / execPath / root are injected so tests substitute a fake child
  * process and never touch the real allocator or tracker.
  */
+import { isLiteSections } from "./hunt-lite-eval.mjs";
 import path from "node:path";
 import fs from "node:fs";
 import { slugify } from "./pdf-paths.mjs";
@@ -232,13 +233,14 @@ export async function persistEvaluation({ spawnFn, execPath, root, coreRoot = ro
   if (!evaluation.ok) return { ok: false, error: evaluation.error };
   if (!evaluation.full) {
     // Scope is user-selected request data, never a model-inferred claim.
-    const scope = evaluation.sections.join(", ") || "fit score only";
+    // hunt: the lite scope (hunt-lite-eval.mjs) is named as such.
+    const scope = isLiteSections(evaluation.sections) ? null : evaluation.sections.join(", ") || "fit score only";
     // Only normalize the report header; matching text in the archived JD is data.
     const bodyStart = markdown.search(/^##\s|^---\s*$/m);
     const cut = bodyStart < 0 ? markdown.length : bodyStart;
     const header = markdown.slice(0, cut)
       .replace(/^\*\*Evaluation scope:\*\*[^\n]*\n?/gmi, "")
-      .replace(/^(# .+)$/m, `$1\n\n**Evaluation scope:** Focused — ${scope}.`);
+      .replace(/^(# .+)$/m, scope === null ? "$1\n\n**Evaluation scope:** Lite — score and level fit (Deep dive runs the full evaluation)." : `$1\n\n**Evaluation scope:** Focused — ${scope}.`);
     markdown = header + markdown.slice(cut);
   }
   if (!ISO_DATE_RE.test(String(today ?? ""))) {
@@ -306,7 +308,7 @@ export async function persistEvaluation({ spawnFn, execPath, root, coreRoot = ro
 
   const postingUrl = /^https?:\/\//i.test(String(url ?? "")) ? String(url) : "";
   const notes = (ISO_DATE_RE.test(String(postedAt ?? "")) ? `; posted: ${postedAt}` : "")
-    + (!evaluation.full ? `; Focused evaluation: ${evaluation.sections.join(", ") || "fit score only"}` : "");
+    + (!evaluation.full ? (isLiteSections(evaluation.sections) ? "; Lite evaluation" : `; Focused evaluation: ${evaluation.sections.join(", ") || "fit score only"}`) : "");
 
   const written = await spawnScript({
     spawnFn, execPath, root: coreRoot, cwd: root,

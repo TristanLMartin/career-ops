@@ -23,7 +23,7 @@ import { MoreNav } from "@/components/hunt/more-nav";
 import { ProfileSwitch } from "@/components/hunt/profile-switch"; // hunt
 import type { ProfileSwitchItem } from "@/lib/hunt-profiles";
 
-export function AppShell({ children, followupsEnabled, profiles = [] }: { children: React.ReactNode; followupsEnabled: boolean; profiles?: ProfileSwitchItem[] }) {
+export function AppShell({ children, followupsEnabled, profiles = [], inboxCount = 0 }: { children: React.ReactNode; followupsEnabled: boolean; profiles?: ProfileSwitchItem[]; inboxCount?: number }) {
   const pathname = usePathname();
   return (
     <JobsProvider>
@@ -36,7 +36,7 @@ export function AppShell({ children, followupsEnabled, profiles = [] }: { childr
       >
         Skip to content
       </a>
-      <MobileNav followupsEnabled={followupsEnabled} profiles={profiles} />
+      <MobileNav followupsEnabled={followupsEnabled} profiles={profiles} inboxCount={inboxCount} />
       <div className="flex min-h-screen">
         <aside className="sticky top-0 hidden print:hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface/30 p-4 md:flex">
           <Link href="/" className="mb-8 flex items-center gap-2.5 px-1">
@@ -63,6 +63,11 @@ export function AppShell({ children, followupsEnabled, profiles = [] }: { childr
                 >
                   <Icon className="size-4" />
                   {label}
+                  {href === "/inbox" && inboxCount > 0 && (
+                    <span className="ml-auto min-w-5 rounded-full bg-brand px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums text-brand-foreground" aria-label={`${inboxCount} need a reply`}>
+                      {inboxCount}
+                    </span>
+                  )}
                   {chip && (
                     <span className="ml-auto rounded-full border border-brand/30 bg-brand-soft px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-brand-text">
                       {chip}

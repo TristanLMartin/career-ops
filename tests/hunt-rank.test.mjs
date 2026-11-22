@@ -212,3 +212,15 @@ test("payFromDescription: escaped dash entities between the two ends of a band",
     assert.deepEqual([p.annualMin, p.annualMax], [186065, 218900], t);
   }
 });
+
+test("Shortlist level gate: a 4.0+ evaluation skips the title-based level check", async () => {
+  const { shortlistLevelOk } = await import("../lib/hunt-rank.mjs");
+  const { LEGACY_TARGET } = await import("./helpers/swe-legacy-rules.mjs");
+  const shortlistLevelOkT = (lead) => shortlistLevelOk(lead, LEGACY_TARGET);
+  assert.equal(shortlistLevelOkT({ level: { key: "staff" }, fit: 4.1 }), true);
+  assert.equal(shortlistLevelOkT({ level: { key: "mid" }, fit: 4.0 }), true);
+  assert.equal(shortlistLevelOkT({ level: { key: "staff" }, fit: 3.9 }), false);
+  assert.equal(shortlistLevelOkT({ level: { key: "staff" }, fit: 4.2, fitVia: "group" }), false);
+  assert.equal(shortlistLevelOkT({ level: { key: "senior" } }), true);
+  assert.equal(shortlistLevelOkT({ level: { key: "mid" } }), false);
+});

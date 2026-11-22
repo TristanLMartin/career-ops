@@ -61,15 +61,16 @@ test("groupMessages: by company, needs-reply first, linked to tracker and inbox"
   assert.equal(normCompany("Stripe, Inc."), "stripe");
 });
 
-test("topPicks: scored only, fit >= 3.8, level >= 0.7, skip/closed out, 3 per company", () => {
+test("topPicks: scored only, fit >= 3.8, level >= 0.7 unless fit >= 4.0, skip/closed out, 3 per company", () => {
   const j = (company, fit, composite, extra = {}) => ({ company, fit, composite, level: { factor: 1 }, ...extra });
   const jobs = {
     a1: j("A", 4.5, 90), a2: j("A", 4.4, 89), a3: j("A", 4.3, 88), a4: j("A", 4.2, 87),
     b1: j("B", 3.7, 99), c1: j("C", 4.6, 95, { level: { factor: 0.45 } }), d1: j("D", null, 100),
     e1: j("E", 4.0, 70), f1: j("F", 4.1, 80, { status: "Rejected" }), g1: j("G", 4.1, 79, { report: { decision: "Skip" } }),
   };
-  assert.deepEqual(topPicks(jobs).map((p) => p.url), ["a1", "a2", "a3", "e1"]);
-  assert.deepEqual(topPicks(jobs, { per_company: 1 }).map((p) => p.url), ["a1", "e1"]);
+  assert.deepEqual(topPicks(jobs).map((p) => p.url), ["c1", "a1", "a2", "a3", "e1"]); // c1: level 0.45 but fit 4.6 always shows
+  assert.deepEqual(topPicks(jobs, { per_company: 1 }).map((p) => p.url), ["c1", "a1", "e1"]);
+  assert.deepEqual(topPicks({ s: j("S", 3.9, 99, { level: { factor: 0.45 } }) }), [], "below 4.0 the level gate still applies");
   assert.deepEqual(notScoredYet({ x: { fit: null, source: "inbox", composite: 50 }, y: { fit: null, source: "inbox", composite: 70 }, z: { fit: 4, source: "inbox", composite: 99 } }).map((p) => p.url), ["y", "x"]);
 });
 

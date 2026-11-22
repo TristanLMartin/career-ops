@@ -4,7 +4,9 @@ target:
   levels: [senior, dual]
   location_tiers: [1, 2, 5]
   always_companies: [DRW, Optiver, Hudson River Trading, Jump Trading, Tower Research Capital, IMC, Five Rings, Jane Street, Citadel, Citadel Securities, Two Sigma]
-  exclude_titles: ["IT Systems", "IT Support", "help desk", "helpdesk", "desktop support"]
+  exclude_titles: ["re:IT", "help ?desk", "desktop support", "re:(named|strategic|enterprise) accounts?", "account team", "re:SA Account", "account solutions architect", "accounting solutions architect", "re:customer solutions (architect|engineer)", "re:pre-?sales", "re:data scientists?", firmware, "re:BIOS", "hardware engineer", "re:writer", "re:early[- ]career"]
+  stretch_levels: [staff, staffplus, stretch]
+  relocate: { tiers: [3], tc_min: 300000, base_top_min: 250000 }
 level:
   big_companies: [Anthropic, OpenAI, Stripe, Databricks, Snowflake, Coinbase, Airbnb, DoorDash, Reddit, Cloudflare, Datadog, MongoDB]
 profile_rules:

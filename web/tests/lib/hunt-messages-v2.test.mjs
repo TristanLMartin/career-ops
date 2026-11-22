@@ -132,8 +132,8 @@ test("Home: true rank, worth a look, new since the last visit (first_seen_at)", 
     d: { company: "D", composite: 10, quick_score: 4 },
     e: { company: "E", composite: 99, status: "Rejected" },
   };
-  assert.deepEqual(trueRank(jobs).map((e) => e.url), ["c", "a", "b", "d"]);
-  assert.deepEqual(worthALook(jobs, 2).map((e) => e.url), ["c", "a", "d"]);
+  assert.deepEqual(trueRank(jobs).map((e) => e.url), ["d", "c", "a", "b"]); // unevaluated: quick score first; head-to-head only breaks ties
+  assert.deepEqual(worthALook(jobs, 2).map((e) => e.url), ["d", "c"]);
   // "new" = first seen after the last visit, and worth a look; re-ranking never makes an old job new
   const worth = worthALook(jobs, 2);
   const firstSeen = { c: "2026-11-01T00:00:00Z", a: "2026-11-21T10:00:00Z", d: "2026-11-21T13:00:00Z" };
@@ -219,7 +219,7 @@ test("calendar invites (meeting threads) are never 'you owe'; name-pair subjects
 });
 
 test("rules: state paid-leave / unemployment mail is other, even when it says application", () => {
-  assert.equal(classifyByRules(msg({ from: "NoReplyPaidLeave@esd.wa.gov", fromName: "noreplypaidleave", subject: "Your Paid Leave benefit application status has changed" })).kind, "other");
-  assert.equal(classifyByRules(msg({ from: "notices@paidleave.wa.gov", subject: "Interview scheduled for your claim" })).kind, "other");
+  assert.equal(classifyByRules(msg({ from: "NoReply-PaidLeave@paidleave.example.gov", fromName: "noreplypaidleave", subject: "Your Paid Leave benefit application status has changed" })).kind, "other");
+  assert.equal(classifyByRules(msg({ from: "notices@paidleave.example.gov", subject: "Interview scheduled for your claim" })).kind, "other");
   assert.equal(classifyByRules(msg({ fromName: "Pat", subtitle: "Talent Partner at Acme", subject: "Paid leave policy at Acme" })).kind, "recruiter");
 });

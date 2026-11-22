@@ -66,13 +66,14 @@ test("only a known mode is ever written", () => {
 test("picking a sort only changes the view; Make default is what saves it", () => {
   const triage = readFileSync(join(root, "src/components/inbox/inbox-triage.tsx"), "utf8");
   // Server and first client render use the default, so hydration matches.
-  // hunt: the branch adds a "rank" mode (default) with its own storage key, see src/lib/hunt-sort-pref.mjs.
-  assert.match(triage, /useState<"rank" \| "fit" \| "newest">\(DEFAULT_HUNT_SORT\)/);
+  // hunt: the branch's sorts are Best overall ("rank", default), Best fit, Highest pay and Newest,
+  // with their own storage key, see src/lib/hunt-sort-pref.mjs.
+  assert.match(triage, /useState<"rank" \| "fit" \| "pay" \| "newest">\(DEFAULT_HUNT_SORT\)/);
   // The saved default is loaded inside an effect, never during render, and sets both the view and the default.
   assert.match(triage, /const saved = readHuntSort\(browserStorage\(\)\);\s*setSortMode\(saved\);\s*setDefaultSort\(saved\);/);
-  // The two sort buttons change the view and never touch storage.
-  assert.match(triage, /onClick=\{\(\) => \{ setSortMode\("fit"\);/);
-  assert.match(triage, /onClick=\{\(\) => \{ setSortMode\("newest"\);/);
+  // The sort buttons change the view and never touch storage (hunt: one button per mode).
+  assert.match(triage, /\(\["rank", "fit", "pay", "newest"\] as const\)\.map\(\(m\) =>/);
+  assert.match(triage, /onClick=\{\(\) => \{ setSortMode\(m\); setDefaultSaveFailed\(false\); \}\}/);
   assert.equal((triage.match(/writeInboxSort\(/g) ?? []).length, 1, "one writer: the Make default handler");
   assert.match(triage, /const makeSortDefault = \(\) => \{[\s\S]*?writeInboxSort\(browserStorage\(\), sortMode\)/);
   // The pill is disabled when the view already is the default, and reads as a check mark then.

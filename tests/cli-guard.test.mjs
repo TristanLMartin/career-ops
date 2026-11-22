@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { spendAllowed } from "../lib/cli-guard.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SPEND = ["hunt-autoscore", "hunt-quickscore", "hunt-h2h", "hunt-h2h-insert", "hunt-message-kinds", "hunt-discovery-boards"];
+const SPEND = ["hunt-autoscore", "hunt-quickscore", "hunt-h2h", "hunt-h2h-insert", "hunt-message-kinds", "hunt-discovery-boards", "hunt-reeval", "hunt-tailor-run"];
 
 function sandbox() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cli-guard-"));
@@ -24,7 +24,8 @@ function sandbox() {
 
 test("every scripts/*.mjs answers --help with usage, exit 0, no files written", () => {
   const s = sandbox();
-  const scripts = fs.readdirSync(path.join(ROOT, "scripts")).filter((f) => /^(hunt-.*|onboard|migrate-legacy-names|local-paths-refresh)\.mjs$/.test(f));
+  // Every CLI (a module with an isMainModule entry point); libraries such as hunt-job-filters are skipped.
+  const scripts = fs.readdirSync(path.join(ROOT, "scripts")).filter((f) => /^(hunt-.*|onboard|migrate-legacy-names|local-paths-refresh)\.mjs$/.test(f) && /isMainModule\(import\.meta\.url\)|exitOnHelp\(/.test(fs.readFileSync(path.join(ROOT, "scripts", f), "utf8")));
   assert.ok(scripts.length >= 18);
   for (const f of scripts) {
     const r = spawnSync(process.execPath, [path.join("scripts", f), "--help"], { cwd: ROOT, env: s.env, encoding: "utf8", timeout: 20_000 });

@@ -40,7 +40,7 @@ const STYLE = `
 @media print{.co-mnav,.co-mscrim,.co-mdrawer{display:none}}
 `;
 
-export function MobileNav({ followupsEnabled, profiles = [] }: { followupsEnabled: boolean; profiles?: ProfileSwitchItem[] }) {
+export function MobileNav({ followupsEnabled, profiles = [], inboxCount = 0 }: { followupsEnabled: boolean; profiles?: ProfileSwitchItem[]; inboxCount?: number }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
@@ -132,12 +132,13 @@ export function MobileNav({ followupsEnabled, profiles = [] }: { followupsEnable
           <button
             type="button"
             onClick={() => setOpen(true)}
-            aria-label="Open menu"
+            aria-label={inboxCount > 0 ? `Open menu, ${inboxCount} need a reply` : "Open menu"}
             aria-expanded={open}
             className="relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md p-2 text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
           >
             <Menu className="size-5" />
             {running > 0 && <span aria-hidden className="co-pulse absolute right-1.5 top-1.5 size-2 rounded-full bg-brand ring-2 ring-surface" />}
+            {inboxCount > 0 && running === 0 && <span aria-hidden className="absolute right-0.5 top-0.5 min-w-4 rounded-full bg-brand px-1 text-center text-[9px] font-bold leading-4 tabular-nums text-brand-foreground ring-2 ring-surface">{inboxCount}</span>}
           </button>
         </div>
       </header>
@@ -183,6 +184,11 @@ export function MobileNav({ followupsEnabled, profiles = [] }: { followupsEnable
               >
                 <Icon className="size-5" />
                 {label}
+                {href === "/inbox" && inboxCount > 0 && (
+                  <span className="ml-auto min-w-5 rounded-full bg-brand px-1.5 py-0.5 text-center text-[10px] font-bold tabular-nums text-brand-foreground" aria-label={`${inboxCount} need a reply`}>
+                    {inboxCount}
+                  </span>
+                )}
                 {chip && (
                   <span className="ml-auto rounded-full border border-brand/30 bg-brand-soft px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-brand-text">
                     {chip}

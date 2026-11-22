@@ -28,6 +28,8 @@ import { parseCoverRequest } from "@/lib/cover-brief.mjs";
 import { capabilitiesFor } from "@/lib/worker-capabilities.mjs";
 import { fencingReport, isCliAllowedForCapabilities } from "@/lib/cli-fencing.mjs";
 import { claudeCliArgs } from "@/lib/claude-invocation.mjs";
+import { withSpendTierModel } from "@/lib/spend-tier-model.mjs";
+import { LITE_SECTIONS, liteSystemPrompt, logWebUsage, parseEvaluationScope, recordDeepDiveDone, recordDeepDiveStart, writeSystemPromptFile } from "@/lib/hunt-lite-eval.mjs";
 import { resolveCvTemplate, resolveUserTemplatesDir } from "@/lib/core/cv-template.mjs";
 import { getProfilePath, profileRef } from "@/lib/core/profile-path.mjs";
 import { readPageFormatSetting, resolveRenderPageFormat, type PageFormatSetting } from "@/lib/core/page-format.mjs";
@@ -43,10 +45,16 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 800; // a real oferta evaluation / pdf-mode CV tailoring + render is heavy and multi-step
 
 export async function POST(req: Request) {
-  const body = await readJsonObject<{ kind?: string; input?: string; cliId?: string; brief?: unknown; evaluationSections?: unknown; ats?: unknown }>(req);
+  const body = await readJsonObject<{ kind?: string; input?: string; cliId?: string; brief?: unknown; evaluationSections?: unknown; ats?: unknown; evaluationScope?: unknown; noUsageLog?: unknown; spotcheck?: unknown }>(req);
   if (!body) return new Response(JSON.stringify({ error: "bad json" }), { status: 400 });
   const { kind = "evaluate", input, cliId: requestedCliId, brief } = body;
-  const evaluation = kind === "evaluate" ? parseEvaluationOptions(body.evaluationSections) : undefined;
+  // hunt: evaluationScope "lite" (score + level fit, hunt-lite-eval.mjs) or "deep" (the full
+  // oferta run behind the job page's Deep dive). Absent keeps upstream's evaluationSections contract.
+  const scope = kind === "evaluate" ? parseEvaluationScope(body.evaluationScope) : null;
+  if (kind === "evaluate" && body.evaluationScope !== undefined && !scope) return Response.json({ error: "evaluationScope must be lite or deep" }, { status: 400 });
+  const evaluation = kind === "evaluate"
+    ? parseEvaluationOptions(scope === "lite" ? [...LITE_SECTIONS] : scope === "deep" ? undefined : body.evaluationSections)
+    : undefined;
   if (evaluation && !evaluation.ok) return Response.json({ error: evaluation.error }, { status: 400 });
   if (!input || !requestedCliId) {
     return new Response(JSON.stringify({ error: "input and cliId required" }), { status: 400 });
@@ -115,7 +123,15 @@ export async function POST(req: Request) {
   // Assemble selected canonical instructions before any extraction or model call.
   // Omitted work never becomes part of the worker's evaluation instructions.
   let evaluationInstructions: string | null = null;
-  if (evaluation?.ok && !evaluation.full) {
+  let liteSystem: string | null = null;
+  if (scope === "lite") {
+    try {
+      liteSystem = liteSystemPrompt({ codeRoot, dataRoot: careerOpsRoot(), evalModeFile: lang.evalModeFile });
+    } catch (error) {
+      console.error("[career-ops] Failed to load lite evaluation instructions:", error);
+      return Response.json({ error: "Could not load the lite evaluation instructions. No AI run was started." }, { status: 422 });
+    }
+  } else if (evaluation?.ok && !evaluation.full) {
     try {
       // modes/ and batch/ are system files: they live in the code checkout.
       const root = codeRoot;
@@ -220,6 +236,7 @@ export async function POST(req: Request) {
   const writeToken = kind === "evaluate" || kind === "pdf" ? acquireTrackerWrite() : null;
   let child;
   let instructionFile: ReturnType<typeof writeEvaluationInstructions> | undefined;
+  let systemFile: ReturnType<typeof writeSystemPromptFile> | undefined;
   let spill: ReturnType<typeof spillOversizedPrompt> | undefined;
   try {
     // Read the JD here, not in the worker: WebFetch drops script content, so a
@@ -243,6 +260,8 @@ export async function POST(req: Request) {
     if (evaluationInstructions) {
       instructionFile = writeEvaluationInstructions(careerOpsRoot(), evaluationInstructions);
     }
+    if (liteSystem) systemFile = writeSystemPromptFile(careerOpsRoot(), liteSystem);
+    if (scope === "deep" && typeof input === "string") recordDeepDiveStart(careerOpsRoot(), input);
     const prompt = buildPrompt({
       kind,
       input,
@@ -258,7 +277,9 @@ export async function POST(req: Request) {
       reportFile: pdfPaths?.reportFile ?? (coverRequest?.ok ? coverRequest.reportFile : undefined),
       coverBrief: coverRequest?.ok ? coverRequest.brief : undefined,
       profile: profileRef(careerOpsRoot()),
-      evaluationInstructions: instructionFile?.reference,
+      evaluationInstructions: systemFile
+        ? "The selected canonical evaluation instructions, the lite scope contract and the candidate's files are in your system prompt under CAREER-OPS LITE JOB EVALUATION. Follow them exactly. Do not Read modes/oferta.md, modes/_shared.md, batch/batch-prompt.md or the candidate files listed there."
+        : instructionFile?.reference,
       prefetchedJd,
       closedEvidence,
     });
@@ -278,7 +299,7 @@ export async function POST(req: Request) {
     // stdout matches spec.parseEvent below; spec.args stays the plain-text argv the
     // envelope-parsing routes rely on.
     const buildArgs = (p: string) =>
-      isClaude ? claudeCliArgs({ kind, prompt: p }) : (spec.streamArgs ?? spec.args)(p);
+      isClaude ? claudeCliArgs({ kind, prompt: p, systemPromptFile: systemFile?.file }) : (spec.streamArgs ?? spec.args)(p);
     // The prompt inlines the whole _profile.md (#4003), so it can outgrow the OS
     // command-line limit (ENAMETOOLONG on Windows). Every kind that reaches here
     // can Read (see TOOL_SCOPES), so an oversized prompt goes to a file under the
@@ -297,9 +318,11 @@ export async function POST(req: Request) {
       { cliId, capabilities },
     );
     if (instructionFile) child.once("close", instructionFile.cleanup);
+    if (systemFile) child.once("close", systemFile.cleanup);
     if (spill.cleanup) child.once("close", spill.cleanup);
   } catch (e) {
     instructionFile?.cleanup();
+    systemFile?.cleanup();
     spill?.cleanup?.();
     // Fencing refuses an argv that contradicts the capability record, so nothing
     // spawned and the stream below — which owns finishRun — is never
@@ -366,6 +389,9 @@ export async function POST(req: Request) {
         if (stderrErrorSnippet || !line.trim() || !isFatalStderr(line)) return;
         stderrErrorSnippet = line.trim().slice(0, 200);
       };
+      let lastTerminal: Record<string, unknown> | null = null;
+      let usageLogged = false;
+      const startedAt = Date.now();
       let lastTokens = 0; // per-run token cost from the CLI's structured usage event (#6) — local only
       let lastCostUsd: number | null = null;
       // pdf-mode's agent only tailors content now (rendering moved to the
@@ -393,6 +419,9 @@ export async function POST(req: Request) {
         try { child.kill("SIGTERM"); } catch { /* ignore */ }
       }, killMs);
       const send = (obj: unknown) => {
+        const t = (obj as { type?: string })?.type;
+        if (t === "done" || t === "gated" || t === "error") lastTerminal ??= obj as Record<string, unknown>;
+        if (t === "done") lastTerminal = obj as Record<string, unknown>;
         if (closed) return;
         try {
           controller.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
@@ -429,6 +458,21 @@ export async function POST(req: Request) {
       // Unknown event types are ignored by the client's switch, so old tabs are safe.
       heartbeat = setInterval(() => send({ type: "keepalive" }), 10_000);
       const close = () => {
+        // hunt: log every web evaluate run's spend (scripts that log their own pass noUsageLog).
+        if (kind === "evaluate" && !usageLogged && body.noUsageLog !== true) {
+          usageLogged = true;
+          const t = lastTerminal;
+          logWebUsage(careerOpsRoot(), {
+            model: (() => { try { return withSpendTierModel(cliId, { cwd: careerOpsRoot(), env: process.env }).env?.ANTHROPIC_MODEL ?? cliId; } catch { return cliId; } })(),
+            scope: scope ?? (evaluation?.ok && !evaluation.full ? "focused" : "full"),
+            status: t?.type === "done" ? "ok" : `${t?.type ?? "error"}: ${String(t?.msg ?? t?.reason ?? "").slice(0, 100)}`,
+            secs: Math.round((Date.now() - startedAt) / 1000),
+            tokens: lastTokens,
+            costUsd: lastCostUsd,
+            report: t?.reportN as number | undefined,
+            url: String(input),
+          });
+        }
         // Resource cleanup is independent of whether the client can still read.
         finishRun();
         if (!closed) {
@@ -561,6 +605,14 @@ export async function POST(req: Request) {
           }
           sendWarnings(result.warnings);
           const reportN = Number(result.num);
+          if (scope === "deep" && Number.isFinite(reportN)) {
+            try {
+              const deepScore = Number.parseFloat(markdown.match(/^\*\*Score:\*\*\s*([\d.]+)/mi)?.[1] ?? "");
+              recordDeepDiveDone(careerOpsRoot(), String(input), { report: reportN, score: deepScore, costUsd: lastCostUsd ?? undefined, codeRoot: resolveCodeRoot(process.cwd(), process.env) });
+            } catch (e) {
+              console.error("[career-ops] deep dive: could not restore the lite score:", e);
+            }
+          }
           if (Number.isFinite(reportN)) {
             send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, reportN });
           } else {
@@ -737,6 +789,11 @@ export async function POST(req: Request) {
             if (event) send(event);
           } else if (envelope?.ok !== true) {
             send({ type: "error", msg: "Internal error: the evaluate run passed its gate with no report to save — please report this." });
+          } else if (body.spotcheck === true) {
+            // hunt: an Opus spot-check of a lite score. Never saved, never ranked: the score
+            // goes back to the caller (scripts/hunt-autoscore.mjs logs it next to the lite one).
+            const spotScore = Number.parseFloat(envelope.markdown.match(/^\*\*Score:\*\*\s*([\d.]+)/mi)?.[1] ?? "");
+            send({ type: "done", tokens: lastTokens, costUsd: lastCostUsd, spotScore: Number.isFinite(spotScore) ? spotScore : null });
           } else {
             evaluatePersistPromise = persistEval(envelope.markdown);
             return;

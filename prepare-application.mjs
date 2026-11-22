@@ -168,9 +168,11 @@ function readProfile() {
 
   const fullName = pick('full_name');
   const [firstName, ...rest] = fullName.split(' ');
+  // Optional explicit legal names win over the split, so a display name with a
+  // middle initial ("Jane Q. Smith") still prefills first "Jane", last "Smith".
   return {
-    firstName:    firstName || '',
-    lastName:     rest.join(' ') || '',
+    firstName:    pick('first_name') || firstName || '',
+    lastName:     pick('last_name') || rest.join(' ') || '',
     email:        pick('email'),
     phone:        pick('phone'),
     location:     pick('location'),

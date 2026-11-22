@@ -6,6 +6,7 @@ import { RouteProgressHost } from "@/components/route-progress-host";
 import { ThemeProvider } from "@/components/theme-provider";
 import { readFollowupsEnabled } from "@/lib/followups-server";
 import { readProfileSwitch } from "@/lib/hunt-profiles"; // hunt
+import { readInboxNeedsCount } from "@/lib/hunt-data"; // hunt
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -46,7 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <RouteProgressHost />
         <ThemeProvider>
-          <AppShell followupsEnabled={followupsEnabled} profiles={readProfileSwitch()}>{children}</AppShell>
+          <AppShell followupsEnabled={followupsEnabled} profiles={readProfileSwitch()} inboxCount={readInboxNeedsCount()}>{children}</AppShell>
         </ThemeProvider>
       </body>
     </html>

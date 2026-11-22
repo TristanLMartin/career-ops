@@ -21,6 +21,8 @@ export type Job = {
   input?: string; // the URL/posting it processed (links inbox rows to their worker)
   kind?: string;
   evaluationSections?: string[];
+  /** hunt: "lite" (score + level fit) or "deep" (full evaluation), see hunt-lite-eval.mjs. */
+  evaluationScope?: "lite" | "deep";
   // A cover run's answers to modes/cover.md Step 6, kept so a failed run still
   // shows them on its run page and refills the form (#7441). Read through
   // storedCoverBrief(): a job restored from localStorage may predate this.
@@ -37,7 +39,7 @@ export type Job = {
   endedAt?: number;
 };
 
-type StartOpts = { title: string; subtitle?: string; kind: string; input: string; page?: string; batchId?: string; brief?: Record<string, string>; evaluationSections?: string[] };
+type StartOpts = { title: string; subtitle?: string; kind: string; input: string; page?: string; batchId?: string; brief?: Record<string, string>; evaluationSections?: string[]; evaluationScope?: "lite" | "deep" };
 
 type Ctx = {
   jobs: Job[];
@@ -152,6 +154,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         input: opts.input,
         kind: opts.kind,
         evaluationSections: opts.evaluationSections ? [...opts.evaluationSections] : undefined,
+        evaluationScope: opts.evaluationScope,
         brief: opts.brief ? { ...opts.brief } : undefined,
         batchId: opts.batchId,
         status: "running",
@@ -244,7 +247,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
             const res = await fetch("/api/run", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId, brief: opts.brief, evaluationSections: opts.evaluationSections }),
+              body: JSON.stringify({ kind: opts.kind, input: opts.input, cliId, brief: opts.brief, evaluationSections: opts.evaluationSections, evaluationScope: opts.evaluationScope }),
             });
             if (!res.ok || !res.body) {
               const e = await res.json().catch(() => ({}));

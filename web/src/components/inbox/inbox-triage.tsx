@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { X } from "lucide-react";
+import { companyFilter, matchesCompany } from "@/lib/hunt-company-filter.mjs";
 import { Undo2 } from "lucide-react";
 import { evaluationGateForJob } from "@/lib/job-gate.mjs";
 import { useJobs } from "@/components/jobs/job-store";
@@ -23,8 +25,9 @@ import { useEvaluationOptions } from "@/components/evaluation-options";
 import { CONFIG_KEY, subscribeConfig } from "@/lib/config-events.mjs";
 import { INBOX_SORT_STORAGE_KEY, writeInboxSort } from "@/lib/inbox-sort-pref.mjs";
 // hunt: Rank sort (default) over data/hunt-enrich.json, see lib/hunt-sort-pref.mjs
-import { DEFAULT_HUNT_SORT, HUNT_SORT_STORAGE_KEY, orderByRank, readRankKey, readHuntSort, writeRankKey, writeHuntSort } from "@/lib/hunt-sort-pref.mjs";
-import { HUNT_RANK_KEYS, rankValue, type HuntEnrichment, type HuntRankKey } from "@/lib/hunt-types";
+import { DEFAULT_HUNT_SORT, HUNT_SORT_STORAGE_KEY, orderByRank, readHuntSort, writeHuntSort } from "@/lib/hunt-sort-pref.mjs";
+import { rankValue, type HuntEnrichment } from "@/lib/hunt-types";
+import { fitValue, standsAlone } from "@/lib/hunt-rank-order.mjs";
 
 const SHORTLIST_KEY = "career-ops:shortlist";
 const HIDDEN_KEY = "career-ops:hidden";
@@ -38,8 +41,22 @@ type UndoNotice = { label: string; fn: () => Promise<void>; busy?: boolean; erro
 // The inbox as a TRIAGE surface: Abundance → Triage → Shortlist → Opt-in Score.
 // Default is the best 20 fits (never the full wall). Newest is a view toggle; "Make default" saves the choice per browser.
 // Free facets + Save/Skip narrow the list. Only "Score shortlist" spends tokens.
-export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
+/** rankCaption: one line on how Best overall works for this profile (lib/hunt-rank-order.mjs). */
+export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; rankCaption?: string | null }) {
   const router = useRouter();
+  // hunt: ?company=X (from a company on /portals), with that entry's ATS boards as &board=.
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const companyQ = params?.get("company")?.trim() || "";
+  const boardQ = params?.getAll("board").join("|") ?? "";
+  const companyF = useMemo(() => (companyQ ? companyFilter(companyQ, boardQ ? boardQ.split("|") : []) : null), [companyQ, boardQ]);
+  const clearCompany = () => {
+    const next = new URLSearchParams(params?.toString() ?? "");
+    next.delete("company");
+    next.delete("board");
+    const q = next.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
+  };
   const { jobs, startJob } = useJobs();
   const { sections, setSections } = useEvaluationOptions();
   // Serialize skip/undo per URL so a fast Undo cannot lose the race to Skip.
@@ -57,11 +74,11 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
   // Both start on the default so server and client render the same; the mount
   // effect loads this browser's saved default. Picking a sort only changes the
   // view; "Make default" is what saves it.
-  const [sortMode, setSortMode] = useState<"rank" | "fit" | "newest">(DEFAULT_HUNT_SORT);
-  const [defaultSort, setDefaultSort] = useState<"rank" | "fit" | "newest">(DEFAULT_HUNT_SORT);
-  const [rankKey, setRankKey] = useState<HuntRankKey>("true");
+  const [sortMode, setSortMode] = useState<"rank" | "fit" | "pay" | "newest">(DEFAULT_HUNT_SORT);
+  const [defaultSort, setDefaultSort] = useState<"rank" | "fit" | "pay" | "newest">(DEFAULT_HUNT_SORT);
   // hunt: Shortlist (default) vs All, and which duplicate groups are expanded.
-  const [view, setView] = useState<"shortlist" | "all" | "discovery">("shortlist");
+  // hunt: the Shortlist/All/Discovery toggle became the sorts; every job, one row per group.
+  const [view, setView] = useState<"shortlist" | "all" | "discovery">("all");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [defaultSaveFailed, setDefaultSaveFailed] = useState(false);
   const makeSortDefault = () => {
@@ -89,8 +106,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     setDefaultSort(saved);
     // hunt: Home's "See all" links here with ?sort=newest; that wins for this visit only.
     const urlSort = new URLSearchParams(window.location.search).get("sort");
-    if (urlSort === "newest" || urlSort === "fit" || urlSort === "rank") setSortMode(urlSort);
-    setRankKey(readRankKey(browserStorage()) as HuntRankKey);
+    if (urlSort === "newest" || urlSort === "rank" || urlSort === "fit" || urlSort === "pay") setSortMode(urlSort);
     try {
       const s = localStorage.getItem(SHORTLIST_KEY);
       if (s) setShortlist(JSON.parse(s));
@@ -207,6 +223,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
     () =>
       enriched.filter((e) => {
         if (hidden.includes(e.job.url)) return false;
+        if (companyF && !matchesCompany(e.job, companyF)) return false;
         if (within != null && (e.age == null || e.age > within)) return false;
         if (sources.size && (!e.source || !sources.has(e.source))) return false;
         if (seniorities.size && (!e.seniority || !seniorities.has(e.seniority))) return false;
@@ -214,7 +231,7 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
         if (kw.trim() && !`${e.job.company} ${e.job.role}`.toLowerCase().includes(kw.trim().toLowerCase())) return false;
         return true;
       }),
-    [enriched, hidden, within, sources, seniorities, locQ, kw],
+    [enriched, hidden, companyF, within, sources, seniorities, locQ, kw],
   );
 
   // Fit order lives in core/inbox-rank.mjs. This is the only sort.
@@ -223,15 +240,21 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       ...entry,
       postedAt: entry.job.postedAt,
       fit: entry.job.fit ?? null,
-    })), sortMode === "rank" ? "fit" : sortMode);
-    const ranked = sortMode !== "rank" ? base : orderByRank(base, (e) => rankValue((e.job as InboxJob & { hunt?: HuntEnrichment | null }).hunt, rankKey));
+    })), sortMode === "newest" ? "newest" : "fit");
+    // hunt: Best overall (#1 first), Best fit (full evaluation, then quick score), Highest pay
+    // (est. TC or posted base); jobs with no value sort last.
+    const t = (e: { job: InboxJob }) => (e.job as InboxJob & { hunt?: HuntEnrichment | null }).hunt;
+    const ranked = sortMode === "rank" ? orderByRank(base, (e) => { const n = t(e)?.rankNo; return n == null ? null : -n; })
+      : sortMode === "fit" ? orderByRank(base, (e) => { const v = t(e); const f = fitValue(v); return f == null ? null : f * 10 + (typeof v?.fit === "number" ? 0.5 : 0) - (v?.rankNo ?? 0) / 1e6; })
+      : sortMode === "pay" ? orderByRank(base, (e) => t(e)?.payUsd ?? null)
+      : base;
     return groupForView(ranked, view, expanded);
-  }, [filtered, sortMode, rankKey, view, expanded]);
+  }, [filtered, sortMode, view, expanded]);
   const shortlistCount = useMemo(() => new Set(filtered.filter((e) => huntOf(e.job)?.groupShortlist).map((e) => huntOf(e.job)?.group ?? e.job.url)).size, [filtered]);
   const discoveryCount = useMemo(() => new Set(filtered.filter((e) => huntOf(e.job)?.origin === "discovery").map((e) => huntOf(e.job)?.group ?? e.job.url)).size, [filtered]);
   const groupCount = useMemo(() => new Set(filtered.map((e) => huntOf(e.job)?.group ?? e.job.url)).size, [filtered]);
 
-  const anyFacet = within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
+  const anyFacet = companyF != null || within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   // Keep the batch cap with filters on too: filters sit under the list, so an
   // uncapped match set pushes what the filter did off screen.
   const capped = !showAll;
@@ -449,31 +472,29 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
       {writeError && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-400">{writeError}</p>}
       {/* Keep recovery mounted when the last Skip refreshes to an empty inbox. */}
       <div hidden={inbox.length === 0}>
+      {companyF && (
+        <div className="mt-4 flex flex-wrap items-center gap-2" data-company-filter>
+          <span className="inline-flex items-center gap-1 rounded-full border border-brand/50 bg-brand/10 py-1 pl-3 pr-1 text-xs text-brand-text">
+            Company: <span className="font-medium">{companyF.name}</span>
+            <button type="button" onClick={clearCompany} aria-label={`Clear the company filter (${companyF.name})`} title="Show every company" className="inline-flex size-6 items-center justify-center rounded-full hover:bg-brand/20 max-sm:size-9">
+              <X className="size-3.5" />
+            </button>
+          </span>
+        </div>
+      )}
       {/* batch header: fresh/filtered slice by default; "See all" lifts the cap */}
       <div ref={listTopRef} className="mt-4 flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
         <p className="text-sm font-medium text-foreground">
-          {anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : capped ? (sortMode === "newest" ? "Fresh — worth a look" : sortMode === "rank" ? "Top ranked" : "Best fits") : "All roles"}
+          {anyFacet ? `${filtered.length} match${filtered.length === 1 ? "" : "es"}` : capped ? ({ rank: "Best overall", fit: "Best fit", pay: "Highest pay", newest: "Newest" } as const)[sortMode] : "All roles"}
         </p>
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
           <div role="group" aria-label="Sort inbox" className="flex min-w-0 max-w-full flex-wrap items-center gap-2 text-xs">
-            <span role="group" aria-label="Which roles" className="mr-1 inline-flex overflow-hidden rounded-full border border-border">
-              <button type="button" aria-pressed={view === "shortlist"} onClick={() => setView("shortlist")} className={cn("px-2.5 py-0.5", view === "shortlist" ? "bg-brand-soft font-medium text-brand-text" : "text-faint hover:text-foreground")}>Shortlist {shortlistCount}</button>
-              <button type="button" aria-pressed={view === "all"} onClick={() => setView("all")} className={cn("px-2.5 py-0.5", view === "all" ? "bg-brand-soft font-medium text-brand-text" : "text-faint hover:text-foreground")}>All {groupCount}</button>
-              <button type="button" aria-pressed={view === "discovery"} onClick={() => setView("discovery")} className={cn("px-2.5 py-0.5", view === "discovery" ? "bg-brand-soft font-medium text-brand-text" : "text-faint hover:text-foreground")}>Discovery {discoveryCount}</button>
-            </span>
-            <button type="button" aria-pressed={sortMode === "rank"} onClick={() => { setSortMode("rank"); setDefaultSaveFailed(false); }} className={cn("inline-flex items-center hover:text-foreground max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:justify-center", sortMode === "rank" ? "font-medium text-foreground" : "text-faint")}>Rank</button>
-            {sortMode === "rank" && (
-              <select
-                aria-label="Rank by"
-                value={rankKey}
-                onChange={(ev) => { const k = ev.target.value as HuntRankKey; setRankKey(k); writeRankKey(browserStorage(), k); }}
-                className="rounded border border-border bg-surface px-1 py-0.5 text-xs text-foreground"
-              >
-                {HUNT_RANK_KEYS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
-              </select>
-            )}
-            <button type="button" aria-pressed={sortMode === "fit"} onClick={() => { setSortMode("fit"); setDefaultSaveFailed(false); }} className={cn("inline-flex items-center hover:text-foreground max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:justify-center", sortMode === "fit" ? "font-medium text-foreground" : "text-faint")}>Best fit</button>
-            <button type="button" aria-pressed={sortMode === "newest"} onClick={() => { setSortMode("newest"); setDefaultSaveFailed(false); }} className={cn("inline-flex items-center hover:text-foreground max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:justify-center", sortMode === "newest" ? "font-medium text-foreground" : "text-faint")}>Newest</button>
+            {/* hunt: the sorts (Best overall is what # means); the Shortlist/All/Discovery toggle is gone */}
+            {(["rank", "fit", "pay", "newest"] as const).map((m) => (
+              <button key={m} type="button" aria-pressed={sortMode === m} onClick={() => { setSortMode(m); setDefaultSaveFailed(false); }} className={cn("inline-flex items-center hover:text-foreground max-sm:min-h-[44px] max-sm:min-w-[44px] max-sm:justify-center", sortMode === m ? "font-medium text-foreground" : "text-faint")}>
+                {{ rank: "Best overall", fit: "Best fit", pay: "Highest pay", newest: "Newest" }[m]}
+              </button>
+            ))}
             <span aria-hidden="true" className="text-border">|</span>
             <button
               type="button"
@@ -491,6 +512,8 @@ export function InboxTriage({ inbox }: { inbox: InboxJob[] }) {
             </button>
           )}
         </div>
+        {/* hunt: one line on how the one Rank works */}
+        {rankCaption && <p className="basis-full text-[11px] text-faint" data-testid="rank-help">{rankCaption}</p>}
       </div>
 
       {/* multi-select action bar */}
@@ -623,7 +646,7 @@ function groupForView<T extends WithJob>(rows: T[], view: "shortlist" | "all" | 
   // then composite) as its visible row, whatever the current sort.
   const byGroup = new Map<string, T[]>();
   for (const r of rows) {
-    const g = huntOf(r.job)?.group;
+    const g = viewGroup(huntOf(r.job));
     if (!g) continue;
     if (!byGroup.has(g)) byGroup.set(g, []);
     byGroup.get(g)!.push(r);
@@ -636,7 +659,7 @@ function groupForView<T extends WithJob>(rows: T[], view: "shortlist" | "all" | 
   const done = new Set<string>();
   for (const r of rows) {
     const t = huntOf(r.job);
-    const g = t?.group;
+    const g = viewGroup(t);
     if (g && done.has(g)) continue;
     if (view === "shortlist" && !t?.groupShortlist) continue;
     if (view === "discovery" && t?.origin !== "discovery") continue;
@@ -648,6 +671,10 @@ function groupForView<T extends WithJob>(rows: T[], view: "shortlist" | "all" | 
     if (g && expanded.has(g)) for (const m of members) { similarCount.set(m.job.url, -1); out.push(m); }
   }
   return out;
+}
+/** hunt: the duplicate group a row folds into; none for a member with its own 4.0+ evaluation (always shown). */
+function viewGroup(t: HuntEnrichment | null | undefined): string | undefined {
+  return t && standsAlone(t) ? undefined : t?.group;
 }
 // url -> similar count for the row (>0 leader with similar, -1 a listed member). Rebuilt on every grouping pass.
 const similarCount = new Map<string, number>();

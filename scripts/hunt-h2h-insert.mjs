@@ -10,11 +10,16 @@
 // Cost is logged to data/hunt-usage.tsv. Never applies or sends anything.
 //
 // Usage: node scripts/hunt-h2h-insert.mjs --urls u1,u2 [--top 20] [--rounds 2] [--batch 7]
+//        node scripts/hunt-h2h-insert.mjs --new [--max 10]   # roles evaluated since the tournament
+//   --new picks the tournament-eligible roles (same filter as the weekly run) that are not in it
+//   yet, best composite first, at most --max. The autoscore cron step runs it after evaluations,
+//   so a newly evaluated role takes its place in Best overall the same day (no profile without a
+//   tournament file is touched).
 import fs from "node:fs";
 import path from "node:path";
 import { getCareerOpsRoot } from "../path-resolver.mjs";
 import { isMainModule } from "../lib/is-main-module.mjs";
-import { MODEL, cardFor, keyRequirements, parseRanking, promptFor, rng, shuffle } from "./hunt-h2h.mjs";
+import { MODEL, cardFor, eligible, keyRequirements, parseRanking, promptFor, rng, shuffle } from "./hunt-h2h.mjs";
 import { runClaude, logUsage } from "./hunt-quickscore.mjs";
 import { exitOnHelp, requireSpendConsent } from "../lib/cli-guard.mjs";
 
@@ -54,6 +59,17 @@ export function insertOrder(incumbents, newIds, rankings) {
     if (i < incumbents.length) out.push(incumbents[i]);
   }
   return out;
+}
+
+/**
+ * Tournament-eligible roles not in the head-to-head yet (evaluated since it ran), best composite
+ * first, at most `max`.
+ * @param {Record<string, any>} jobs enrichment rows
+ * @param {{ items: { url: string }[] }} doc data/hunt-h2h.json
+ */
+export function newSinceTournament(jobs, doc, max = 10) {
+  const inIt = new Set((doc?.items ?? []).map((i) => i.url));
+  return eligible(jobs, 100000).map(([url]) => url).filter((u) => !inIt.has(u)).slice(0, Math.max(0, max));
 }
 
 export async function insert({ root = getCareerOpsRoot(), urls, top = 20, rounds = 2, size = 7, run = runClaude, log = () => {} } = {}) {
@@ -115,8 +131,16 @@ if (isMainModule(import.meta.url)) {
   if (process.argv.includes("--help") || process.argv.includes("-h")) exitOnHelp(import.meta.url);
   requireSpendConsent("hunt-h2h-insert", { freeFlags: [] });
   const arg = (n, d) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : d; };
-  const urls = String(arg("--urls", "")).split(",").map((s) => s.trim()).filter(Boolean);
-  if (!urls.length) { console.error("usage: --urls u1,u2"); process.exit(2); }
+  let urls = String(arg("--urls", "")).split(",").map((s) => s.trim()).filter(Boolean);
+  if (process.argv.includes("--new")) {
+    const root = getCareerOpsRoot();
+    const h2hFile = path.join(root, "data", "hunt-h2h.json");
+    if (!fs.existsSync(h2hFile)) { console.log("hunt-h2h-insert: no tournament for this profile, nothing to insert"); process.exit(0); }
+    const jobs = JSON.parse(fs.readFileSync(path.join(root, "data", "hunt-enrich.json"), "utf8")).jobs;
+    urls = newSinceTournament(jobs, JSON.parse(fs.readFileSync(h2hFile, "utf8")), Number(arg("--max", 10)));
+    if (!urls.length) { console.log("hunt-h2h-insert: nothing new since the tournament"); process.exit(0); }
+  }
+  if (!urls.length) { console.error("usage: --urls u1,u2 | --new [--max 10]"); process.exit(2); }
   const r = await insert({ urls, top: Number(arg("--top", 20)), rounds: Number(arg("--rounds", 2)), size: Number(arg("--batch", 7)), log: console.log });
   console.log(JSON.stringify(r, null, 1));
 }

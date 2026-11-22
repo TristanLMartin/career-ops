@@ -14,8 +14,10 @@ test("tracker identifiers sort numerically rather than lexicographically", () =>
   assert.deepEqual([...rows].sort((a, b) => compareTrackerNumbers(b, a)).map(({ n }) => n), ["10", "2", "1"]);
 });
 
-test("Tracker is the first sortable Pipeline column", () => {
-  assert.match(source, /const SORT_KEYS = \["tracker", "company", "role", "score", "status", "date"\]/);
+// hunt: Rank (the Best overall #) is the first column; the tracker number is a muted "ID" at the far right.
+test("Rank is the first sortable Pipeline column", () => {
+  assert.match(source, /const SORT_KEYS = \["rank", "company", "role", "score", "pay", "status", "date"\]/); // hunt: Pay after Fit
+  assert.match(source, /<td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums text-faint">ID \{r\.n\}<\/td>/);
 });
 
 test("sortable Pipeline headers use native keyboard-operable buttons", () => {
@@ -25,7 +27,7 @@ test("sortable Pipeline headers use native keyboard-operable buttons", () => {
 
 test("the visible tracker identifier uses the canonical tracker route", () => {
   assert.match(source, /const detailHref = `\/pipeline\/\$\{encodeURIComponent\(r\.n\)\}/);
-  assert.match(source, /<Link href=\{detailHref\}[^>]*>\s*#\{r\.n\}\s*<\/Link>/);
+  assert.match(source, /<Link href=\{detailHref\}[^>]*>\s*\{rank != null \? `#\$\{rank\}`/);
 });
 
 test("the lower-priority Date header and cells hide below the large breakpoint", () => {

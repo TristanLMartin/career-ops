@@ -20,8 +20,9 @@ const AGENCY_RE = /\b(paraform|integra\s+advisors|hired\.com|triplebyte|wellfoun
 const RECEIPT_RE = /\b(received\s+your\s+application|thank(?:s| you)\s+for\s+(?:applying|your\s+application|your\s+interest)|application\s+(?:received|confirmation)|we(?:'|’)ve\s+received)\b/i;
 const RECRUITING_DOMAIN_RE = /@(?:[a-z0-9-]+\.)*(?:greenhouse\.io|ashbyhq\.com|lever\.co|myworkday(?:jobs)?\.com|smartrecruiters\.com|icims\.com|paraform\.com|gem\.com|workablemail\.com|hire\.lever\.co)\b/i;
 
-// State benefits mail (paid leave / unemployment, e.g. Washington state ESD): never a job thread, even when it says "application".
-const GOV_BENEFITS_RE = /(?:@|\b)(?:[a-z0-9-]+\.)*(?:paidleave\.wa\.gov|esd\.wa\.gov)\b|\bnoreplypaidleave\b|\bpaid\s+leave\s+(?:benefit|claim|application)/i;
+// Government benefits mail (paid leave / unemployment claims, from a *.gov benefits sender): never a
+// job thread, even when it says "application".
+const GOV_BENEFITS_RE = /@(?:[a-z0-9-]+\.)*[a-z0-9-]*(?:paidleave|unemployment|uibenefits)[a-z0-9-]*\.(?:[a-z0-9-]+\.)*gov\b|\bnoreply-?paidleave\b|\b(?:paid\s+(?:family\s+)?leave|unemployment(?:\s+insurance)?)\s+(?:benefit|claim|application)s?\b/i;
 
 const s = (v) => String(v ?? "");
 
@@ -192,6 +193,8 @@ export function threadRows(messages, { marks = {}, kindOverrides = {}, cache = {
         lastFromMe: !!m.lastFromMe,
         owe: needsReply(m, now) || st.newReply,
         automated: !!m.automated,
+        meeting: !!m.meeting,
+        subject: s(m.subject),
         kind: k.kind,
         kindBy: k.by,
         why: k.why,

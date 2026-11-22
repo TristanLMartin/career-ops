@@ -112,7 +112,7 @@ export function linkedInPerson(from, subject) {
 export function toRow(t, companies) {
   const other = parseFrom(t.lastFromMe ? t.from : t.lastFrom || t.from);
   const first = parseFrom(t.from);
-  // A thread he started and wrote last (from == lastFrom == him): the other person is in `to`.
+  // A thread you started and wrote last (from == lastFrom == you): the other person is in `to`.
   const to = t.lastFromMe && t.to && (!t.lastFrom || t.lastFrom === t.from) ? parseFrom(String(t.to).split(",")[0]) : null;
   const pick = to?.address ? to : first.address && !t.lastFromMe ? other : first;
   const row = {

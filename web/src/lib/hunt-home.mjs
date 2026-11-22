@@ -17,9 +17,10 @@ export function topPicks(jobs, cfg = {}) {
   const out = [];
   const ranked = Object.entries(jobs ?? {})
     .map(([url, e]) => ({ url, ...e }))
-    .filter((e) => e.fit != null && e.fitVia !== "group" && e.fit >= c.min_fit && (e.level?.factor ?? 1) >= c.min_level && typeof e.composite === "number")
+    // A 4.0+ evaluation always shows, whatever the title level says.
+    .filter((e) => e.fit != null && e.fitVia !== "group" && e.fit >= c.min_fit && (e.fit >= 4.0 || (e.level?.factor ?? 1) >= c.min_level) && typeof e.composite === "number")
     .filter((e) => !CLOSED.has(String(e.status ?? "")) && !/^(skip|discard)/i.test(String(e.report?.decision ?? "")))
-    .filter((e) => e.groupLeader !== false && !e.belowFloor)
+    .filter((e) => (e.groupLeader !== false || (e.fit >= 4.0 && e.fitVia !== "group")) && !e.belowFloor)
     // True rank: Sonnet head-to-head order first (top ~100), composite below.
     .sort((a, b) => (a.h2h_rank ?? 1e9) - (b.h2h_rank ?? 1e9) || b.composite - a.composite || b.fit - a.fit);
   for (const e of ranked) {

@@ -245,7 +245,7 @@ function RowDetails({ r }: { r: TrackerRow }) {
   return (
     <div className="mt-3 space-y-2 text-sm md:mt-0">
       <p className="text-xs text-faint">
-        Tracker #{r.n}{r.score && r.score !== "N/A" ? ` · score ${r.score}` : ""}{payLabel(r) ? ` · ${payLabel(r)}` : ""}{r.location ? ` · ${r.location}` : ""}
+        ID {r.n}{r.score && r.score !== "N/A" ? ` · score ${r.score}` : ""}{payLabel(r) ? ` · ${payLabel(r)}` : ""}{r.location ? ` · ${r.location}` : ""}
       </p>
       {r.notes && <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-muted">{r.notes}</p>}
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">

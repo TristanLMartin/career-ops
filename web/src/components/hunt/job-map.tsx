@@ -5,13 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { LOCATION_GROUPS, ROLE_FAMILIES, payTicks, visiblePoints } from "@/lib/hunt-map.mjs";
+import { LOCATION_GROUPS, ROLE_FAMILIES, offScale, payTicks, robustDomain, visiblePoints } from "@/lib/hunt-map.mjs";
 import { referralLinks } from "@/lib/hunt-referrals.mjs";
 
 export type MapPoint = {
   url: string; x: number; y: number; fit: number; fitFrom: "full" | "group" | "quick"; estimated: boolean;
   loc: string; family: string; company: string; title: string; location: string;
-  base: [number, number] | null; basis: string | null; tc: number | null; tcConfidence: string | null;
+  base: [number, number] | null; hourly?: [number, number] | null; basis: string | null; tc: number | null; tcConfidence: string | null;
   rank: number | null; why: string; status: string; tracker: string | null; belowFloor: boolean; inDefault: boolean;
 };
 
@@ -64,16 +64,19 @@ function LegendShape({ family, families, color = "var(--muted)", hollow = false 
 // "Who do I know here?" — 1st-degree LinkedIn people search for the point's company.
 const firstDegree = (p: MapPoint) => referralLinks(p.company)?.first ?? null;
 
+// Every point opens a page in the app: the evaluation when there is one, else the posting's
+// detail page (quick score, its reason, pay, "Run full evaluation").
+const jobHref = (p: { tracker: string | null; url: string }) =>
+  p.tracker ? `/pipeline/${encodeURIComponent(p.tracker)}` : `/pipeline/posting?url=${encodeURIComponent(p.url)}`;
+
 function openJob(p: MapPoint, router: ReturnType<typeof useRouter>) {
-  if (p.tracker) router.push(`/pipeline/${encodeURIComponent(p.tracker)}`);
-  else window.open(p.url, "_blank", "noopener,noreferrer");
+  router.push(jobHref(p));
 }
 
-export function JobMap({ points, noPay, baseFloor = null, families: familyNames = null }: { points: MapPoint[]; noPay: number; baseFloor?: number | null; families?: string[] | null }) {
+/** floor: the profile's base pay floor (config/ranking.yml base_floor), or null for none. families: the profile's role categories (null = the built-in software ones). */
+export function JobMap({ points, noPay, floor = null, families: familyNames = null }: { points: MapPoint[]; noPay: number; floor?: number | null; families?: string[] | null }) {
   const fams: readonly string[] = familyNames && familyNames.length ? [...familyNames, "Other"] : ROLE_FAMILIES;
   const shapeFams: readonly string[] = familyNames && familyNames.length ? familyNames : ROLE_FAMILIES;
-  const floor = baseFloor && baseFloor > 0 ? baseFloor : null;
-  const ref = floor ?? 100_000;
   const router = useRouter();
   const [all, setAll] = useState(false);
   const [below, setBelow] = useState(false);
@@ -100,18 +103,20 @@ export function JobMap({ points, noPay, baseFloor = null, families: familyNames 
   const phone = width < 560;
   const H = phone ? 360 : 460;
   const M = { l: phone ? 44 : 56, r: 14, t: 22, b: 40 };
-  const ys = scoped.map((p) => p.y);
-  const yMin = Math.min(ref - 50_000, ...(ys.length ? ys : [ref]));
-  const yMax = Math.max(ref + 100_000, ...(ys.length ? ys : [ref]));
+  // Both axes cover about the 2nd-98th percentile (padded), so one bad parse can't squash the
+  // chart; points outside are pinned to the edge with an off-scale marker.
+  const [yMin, yMax] = robustDomain(scoped.map((p) => p.y), { pad: 0.08, minPad: 10_000, include: floor ? [floor] : [], hardMin: 0, fallback: [floor ? floor - 50_000 : 50_000, floor ? floor + 100_000 : 200_000] });
   const ticks = payTicks(yMin, yMax);
   const y0 = ticks[0], y1 = ticks[ticks.length - 1];
-  // Fit axis starts just left of the lowest fit shown, so a tight cluster gets the room.
-  // A few low outliers are pinned to the left edge instead of squeezing everyone else.
-  const fits = scoped.map((p) => p.fit).sort((a, b) => a - b);
-  const x0 = Math.max(0.8, Math.floor(Math.min(5, fits[Math.floor(fits.length * 0.03)] ?? 1)) - 0.3);
+  const [fitLo] = robustDomain(scoped.map((p) => p.x), { pad: 0.04, minPad: 0.15, hardMin: 0.8, hardMax: 5.2, fallback: [1, 5.2] });
+  const x0 = Math.max(0.8, Math.min(4.5, Math.floor(fitLo * 2) / 2 - 0.2));
   const xTicks = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].filter((t) => t >= x0 && (5.2 - x0 <= 2.6 || Number.isInteger(t)));
-  const sx = (v: number) => M.l + ((Math.max(v, x0 + 0.05) - x0) / (5.2 - x0)) * (width - M.l - M.r);
-  const sy = (v: number) => M.t + (1 - (v - y0) / (y1 - y0)) * (H - M.t - M.b);
+  const cx = (v: number) => Math.min(5.2, Math.max(v, x0 + 0.05));
+  const cy = (v: number) => Math.min(y1, Math.max(v, y0));
+  const sx = (v: number) => M.l + ((cx(v) - x0) / (5.2 - x0)) * (width - M.l - M.r);
+  const sy = (v: number) => M.t + (1 - (cy(v) - y0) / (y1 - y0)) * (H - M.t - M.b);
+  const off = (p: MapPoint) => offScale(p.y, [y0, y1]) ?? (p.x < x0 ? "left" : null);
+  const floorLabel = floor ? `${k(floor)} base floor` : null;
   const r = phone ? 5 : 5.5;
 
   function nearest(clientX: number, clientY: number, svg: SVGSVGElement, within: number): MapPoint | null {
@@ -138,7 +143,7 @@ export function JobMap({ points, noPay, baseFloor = null, families: familyNames 
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Chip on={all} onClick={() => { setAll((v) => !v); setPicked(null); }}>All jobs</Chip>
-        {floor && <Chip on={below} onClick={() => { setBelow((v) => !v); setPicked(null); }}>Below {k(floor)} too</Chip>}
+        {floor ? <Chip on={below} onClick={() => { setBelow((v) => !v); setPicked(null); }}>Below {k(floor)} too</Chip> : null}
         <span className="text-xs text-faint">
           {shown.length} shown{!all ? " · Shortlist + head-to-head top 100" : " · one per duplicate group"}{noPay ? ` · ${noPay} with no pay listed are left out` : ""}
         </span>
@@ -178,11 +183,23 @@ export function JobMap({ points, noPay, baseFloor = null, families: familyNames 
           ))}
           <text x={M.l + (width - M.l - M.r) / 2} y={H - 4} textAnchor="middle" fontSize={11} fill="var(--muted)">Fit (1–5) →</text>
           <text x={M.l} y={M.t - 2} fontSize={11} fill="var(--muted)">↑ Pay</text>
-          {floor && <line x1={M.l} x2={width - M.r} y1={sy(floor)} y2={sy(floor)} stroke="var(--muted)" strokeWidth={1.25} strokeDasharray="5 4" />}
-          {floor && <text x={M.l + 6} y={sy(floor) - 6} fontSize={11} fill="var(--muted)">{k(floor)} base floor</text>}
+          {floor && floorLabel ? (
+            <>
+              <line x1={M.l} x2={width - M.r} y1={sy(floor)} y2={sy(floor)} stroke="var(--muted)" strokeWidth={1.25} strokeDasharray="5 4" />
+              <text x={M.l + 6} y={sy(floor) - 6} fontSize={11} fill="var(--muted)">{floorLabel}</text>
+            </>
+          ) : null}
           {shown.map((p) => (
             <Shape key={p.url} family={p.family} families={shapeFams} x={sx(p.x)} y={sy(p.y)} r={r} color={LOC_VAR[p.loc]} hollow={p.estimated} dim={!!tip && tip.url !== p.url} />
           ))}
+          {/* off-scale: a small arrow beside a point pinned to the edge */}
+          {shown.map((p) => {
+            const o = off(p);
+            if (!o) return null;
+            const x = sx(p.x), y = sy(p.y);
+            const d = o === "high" ? `M${x + r + 3},${y + 2} l4,-6 l4,6Z` : o === "low" ? `M${x + r + 3},${y - 2} l4,6 l4,-6Z` : `M${x - r - 3},${y} l-6,-4 l0,8Z`;
+            return <path key={`off-${p.url}`} d={d} fill="var(--muted)" pointerEvents="none" data-offscale={o} />;
+          })}
           {tip && <circle cx={sx(tip.x)} cy={sy(tip.y)} r={r + 5} fill="none" stroke="var(--fg)" strokeWidth={1.5} pointerEvents="none" />}
         </svg>
 
@@ -191,7 +208,7 @@ export function JobMap({ points, noPay, baseFloor = null, families: familyNames 
             className="pointer-events-none absolute z-10 w-72 rounded-lg border border-border bg-surface p-3 text-sm shadow-lg"
             style={{ left: Math.min(Math.max(8, sx(hover.x) + 14), width - 296), top: Math.max(0, Math.min(sy(hover.y) - 20, H - 220)) }}
           >
-            <Details p={hover} />
+            <Details p={hover} off={off(hover)} />
             <p className="mt-2 text-xs text-faint">Click to open{firstDegree(hover) ? ` · Shift-click: ${firstDegree(hover)!.label}` : ""}</p>
           </div>
         )}
@@ -200,7 +217,7 @@ export function JobMap({ points, noPay, baseFloor = null, families: familyNames 
       {picked && (
         <div className="mt-3 rounded-xl border border-border bg-surface p-4 text-sm shadow-sm">
           <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1"><Details p={picked} /></div>
+            <div className="min-w-0 flex-1"><Details p={picked} off={off(picked)} /></div>
             <button type="button" aria-label="Close" onClick={() => setPicked(null)} className="-m-2 p-2 text-faint hover:text-foreground"><X className="size-4" /></button>
           </div>
           {firstDegree(picked) && (
@@ -209,7 +226,7 @@ export function JobMap({ points, noPay, baseFloor = null, families: familyNames 
             </a>
           )}
           <button type="button" onClick={() => openJob(picked, router)} className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-lg border border-border px-4 text-sm font-medium text-foreground hover:bg-surface-hover">
-            Open {picked.tracker ? "job" : "posting"}{!picked.tracker && <ExternalLink className="size-3.5" />}
+            Open {picked.tracker ? "evaluation" : "job details"}
           </button>
         </div>
       )}
@@ -239,7 +256,8 @@ export function JobMap({ points, noPay, baseFloor = null, families: familyNames 
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-faint">
           <span className="inline-flex items-center gap-1.5"><LegendShape family={shapeFams[0]} families={shapeFams} /> posted base</span>
           <span className="inline-flex items-center gap-1.5"><LegendShape family={shapeFams[0]} families={shapeFams} hollow /> estimated TC</span>
-          <span className="inline-flex items-center gap-1.5"><svg width="18" height="6" aria-hidden><line x1="0" x2="18" y1="3" y2="3" stroke="var(--muted)" strokeDasharray="4 3" strokeWidth="1.25" /></svg> $200k base floor</span>
+          {floorLabel ? <span className="inline-flex items-center gap-1.5"><svg width="18" height="6" aria-hidden><line x1="0" x2="18" y1="3" y2="3" stroke="var(--muted)" strokeDasharray="4 3" strokeWidth="1.25" /></svg> {floorLabel}</span> : null}
+          <span className="inline-flex items-center gap-1.5"><svg width="10" height="8" aria-hidden><path d="M1,7 l4,-6 l4,6Z" fill="var(--muted)" /></svg> off-scale (pinned to the edge)</span>
         </p>
       </div>
     </div>
@@ -262,8 +280,11 @@ function Chip({ on, onClick, children, muted }: { on: boolean; onClick: () => vo
   );
 }
 
-function Details({ p }: { p: MapPoint }) {
-  const base = p.base ? (p.base[0] === p.base[1] ? k(p.base[0]) : `${k(p.base[0])}–${k(p.base[1])}`) : null;
+function Details({ p, off }: { p: MapPoint; off?: string | null }) {
+  const range = (a: number, b: number, f: (n: number) => string) => (a === b ? f(a) : `${f(a)}–${f(b)}`);
+  const base = p.hourly && p.base
+    ? `${range(p.hourly[0], p.hourly[1], (n) => `$${n}`)}/hr (hourly, ~${range(p.base[0], p.base[1], k)}/yr)`
+    : p.base ? range(p.base[0], p.base[1], k) : null;
   return (
     <div className="space-y-1">
       <p className="font-semibold leading-snug text-foreground">{p.company}</p>
@@ -274,8 +295,9 @@ function Details({ p }: { p: MapPoint }) {
         {p.tc ? ` · est. TC ~${k(p.tc)}${p.tcConfidence ? ` (${p.tcConfidence})` : ""}` : ""}
       </p>
       <p className="text-xs text-muted">
-        {p.rank ? `True rank #${p.rank} · ` : ""}{p.fitFrom === "quick" ? `Quick score ${p.fit}/5` : `Fit ${p.fit}/5${p.fitFrom === "group" ? " (via group)" : ""}`} · {p.status}
+        {p.rank ? `#${p.rank} Best overall · ` : ""}{p.fitFrom === "quick" ? `Quick score ${p.fit}/5` : `Fit ${p.fit}/5${p.fitFrom === "group" ? " (via group)" : ""}`} · {p.status}
       </p>
+      {off && off !== "left" ? <p className="text-xs font-medium text-muted">Off-scale: {k(p.y)} is {off === "high" ? "above" : "below"} the chart, shown at the edge</p> : null}
       {p.why && <p className="text-xs leading-snug text-faint">{p.why}</p>}
     </div>
   );

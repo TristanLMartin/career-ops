@@ -1,6 +1,6 @@
-// hunt: /follow-ups is an alias; the page lives at /followups (upstream links use that).
+// hunt: /follow-ups is an alias; follow-ups live in the Inbox now.
 import { redirect } from "next/navigation";
 
 export default function FollowUpsAlias() {
-  redirect("/followups");
+  redirect("/inbox");
 }

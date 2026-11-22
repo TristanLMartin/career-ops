@@ -20,7 +20,8 @@ const src = readFileSync(
 );
 
 test("pipeline-view skips # and role report links in the tab order", () => {
-  const withNum = [...src.matchAll(/<Link\b[^>]*>\s*#\{r\.n\}/g)].map((m) => m[0]);
+  // hunt: the first cell's link shows the Best overall rank (#N) instead of the tracker number.
+  const withNum = [...src.matchAll(/<Link\b[^>]*>\s*\{rank != null \? `#\$\{rank\}`/g)].map((m) => m[0]);
   const withRole = [...src.matchAll(/<Link\b[^>]*>\{r\.role\}/g)].map((m) => m[0]);
   assert.equal(withNum.length, 1, `expected one # link, got ${withNum.length}: ${JSON.stringify(withNum)}`);
   assert.equal(withRole.length, 1, `expected one role link, got ${withRole.length}: ${JSON.stringify(withRole)}`);

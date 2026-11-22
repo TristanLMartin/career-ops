@@ -150,13 +150,24 @@ export function grantsWriteCapability(scope) {
  * Assembled here, not in the route, so a guard can assert on the command line
  * that actually ships instead of on source text that can be rewritten around it.
  *
- * @param {{kind: string, prompt: string}} args
+ * hunt: an evaluate run is self-contained (the prompt names every file it needs), so it
+ * loads no settings sources (no CLAUDE.md/AGENTS.md auto-import, user CLAUDE.md, hooks or
+ * settings), no skills listing, and keeps per-machine sections out of the cached system
+ * prompt. That took a run's base context from ~63K to ~18K tokens. `systemPromptFile` appends
+ * the static instructions to the system prompt so consecutive runs share the cache.
+ *
+ * @param {{kind: string, prompt: string, systemPromptFile?: string}} args
  * @returns {string[]}
  */
-export function claudeCliArgs({ kind, prompt }) {
+export function claudeCliArgs({ kind, prompt, systemPromptFile }) {
   const scope = toolScopeFor(kind);
+  const lean = kind === "evaluate"
+    ? ["--setting-sources", "", "--disable-slash-commands", "--exclude-dynamic-system-prompt-sections"]
+    : [];
   return [
     "-p", prompt,
+    ...lean,
+    ...(systemPromptFile ? ["--append-system-prompt-file", systemPromptFile] : []),
     "--output-format", "stream-json",
     "--verbose",
     "--include-partial-messages",

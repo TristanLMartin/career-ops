@@ -46,6 +46,7 @@ export function PipelineTableRowsSkeleton({ rows = 8, trackerColumn = false }: {
           </td>
           <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>
           <td className="px-4 py-3"><Skeleton className="h-5 w-12 rounded-full" /></td>
+          {trackerColumn && <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>}
           <td className="whitespace-nowrap px-4 py-3">
             <div className="flex items-center gap-1.5">
               <Skeleton className="size-1.5 rounded-full" />

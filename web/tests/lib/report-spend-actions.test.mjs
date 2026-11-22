@@ -24,8 +24,9 @@ test("the report page shows the verdict before the action row, and delete stays 
     "utf8",
   );
   const verdict = src.indexOf(">Verdict<");
-  const generate = src.indexOf("<GeneratePdfButton");
-  const checklist = src.indexOf("Apply checklist");
+  // hunt: Generate tailored CV and Apply checklist live inside the Tailor & apply panel.
+  const generate = src.indexOf("<TailorApplyPanel");
+  const checklist = src.indexOf("applyHref={spend.checklist");
   const apply = src.indexOf("<ApplyButton");
   const remove = src.indexOf("<DeleteFromTracker");
   assert.ok(verdict !== -1 && generate !== -1 && remove !== -1);

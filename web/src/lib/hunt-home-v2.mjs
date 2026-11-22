@@ -3,7 +3,9 @@
  * New since you last looked · footer). No I/O; the page reads files and passes them in.
  */
 
-const CLOSED = new Set(["Rejected", "Discarded", "SKIP", "Hired"]);
+import { needsYouFromInbox } from "./hunt-inbox.mjs";
+import { rankedJobs } from "./hunt-rank-order.mjs";
+
 const PAST_EVALUATED = new Set(["Speculative", "Applied", "Responded", "Assessment", "Interview", "Offer"]);
 const DAY = 24 * 3600e3;
 
@@ -39,14 +41,33 @@ export function inFlight(rows) {
   return (rows ?? []).filter((r) => PAST_EVALUATED.has(r.status)).sort((a, b) => String(b.updated).localeCompare(String(a.updated)));
 }
 
+/** The "In progress" lane's statuses, furthest stage first. */
+export const IN_PROGRESS_STAGES = ["Offer", "Interview", "Assessment", "Responded", "Applied"];
+
+/**
+ * The "In progress" lane pinned above the ranked list on Jobs and Home: tracker rows that are
+ * Applied, Responded, Assessment, Interview or Offer, furthest stage first, then most recently
+ * updated. Rows with no posting URL stay (they link to the tracker row).
+ */
+export function inProgress(rows) {
+  const stage = (s) => IN_PROGRESS_STAGES.indexOf(String(s ?? "").trim());
+  return (rows ?? []).filter((r) => stage(r.status) >= 0).sort((a, b) => stage(a.status) - stage(b.status) || String(b.updated).localeCompare(String(a.updated)));
+}
+
 /**
  * "Needs you": only items needing action, one line each.
- * @param {{ tracker?: any[], threads?: any[], followups?: any[], newTop?: any[], now?: number }} [input]
+ * When `inboxNeeds` (the Inbox's "Needs my reply" items) is given, those replace the tracker,
+ * message and follow-up rows, so Home and the Inbox agree on what needs him.
+ * @param {{ tracker?: any[], threads?: any[], followups?: any[], newTop?: any[], inboxNeeds?: any[] | null, now?: number }} [input]
  * @returns {{id: string, label: string, detail: string, action: string, href: string, external?: boolean, sort: number}[]}
  */
-export function needsYou({ tracker = [], threads = [], followups = [], newTop = [], now = Date.now() } = {}) {
+export function needsYou({ tracker = [], threads = [], followups = [], newTop = [], inboxNeeds = null, now = Date.now() } = {}) {
   const today = localDay(now);
   const out = [];
+  if (Array.isArray(inboxNeeds)) {
+    out.push(...needsYouFromInbox(inboxNeeds));
+    tracker = []; threads = []; followups = [];
+  }
   for (const r of inFlight(tracker)) {
     const due = dateInText(r.next, now);
     if (due && due <= today) {
@@ -61,25 +82,23 @@ export function needsYou({ tracker = [], threads = [], followups = [], newTop = 
   }
   for (const f of followups) {
     if (f.archived || !f.due || f.due > today) continue;
-    out.push({ id: `fu:${f.id}`, label: f.about ? `${f.name} · ${f.about}` : f.name, detail: `Follow-up ${f.due < today ? "overdue" : "due today"}`, action: "Follow up", href: "/followups", sort: 3 });
+    out.push({ id: `fu:${f.id}`, label: f.about ? `${f.name} · ${f.about}` : f.name, detail: `Follow-up ${f.due < today ? "overdue" : "due today"}`, action: "Follow up", href: "/inbox", sort: 3 });
   }
   for (const j of newTop) {
-    out.push({ id: `new:${j.url}`, label: `${j.company} · ${j.displayRole ?? j.role}`, detail: `New #${j.rank} by True rank, not reviewed`, action: "Review", href: j.report?.tracker ? `/pipeline/${j.report.tracker}` : j.url, external: !j.report?.tracker, sort: 4 });
+    out.push({ id: `new:${j.url}`, label: `${j.company} · ${j.displayRole ?? j.role}`, detail: `New, #${j.rank} Best overall, not reviewed`, action: "Review", href: j.report?.tracker ? `/pipeline/${j.report.tracker}` : `/pipeline/posting?url=${encodeURIComponent(j.url)}`, sort: 4 });
   }
   return out.sort((a, b) => a.sort - b.sort);
 }
 
-/** True rank over every open inbox posting: head-to-head order first, then composite. */
+/**
+ * The one Rank (lib/hunt-rank-order.mjs), the same #N Jobs, the Map and job pages show.
+ * Below-floor jobs keep their (demoted) number but Home leaves them out.
+ */
 export function trueRank(jobs) {
-  return Object.entries(jobs ?? {})
-    .map(([url, e]) => ({ url, ...e }))
-    .filter((e) => typeof e.composite === "number" && e.groupLeader !== false && !CLOSED.has(String(e.status ?? "")) && !e.belowFloor)
-    .filter((e) => !/^(skip|discard)/i.test(String(e.report?.decision ?? "")))
-    .sort((a, b) => (a.h2h_rank ?? 1e9) - (b.h2h_rank ?? 1e9) || b.composite - a.composite)
-    .map((e, i) => ({ ...e, rank: i + 1 }));
+  return rankedJobs(jobs).filter((e) => !e.belowFloor);
 }
 
-/** Postings worth a look: top `top` by True rank, or a fit / quick score of 4+. */
+/** Postings worth a look: top `top` by Best overall, or a fit / quick score of 4+. */
 export function worthALook(jobs, top = 100) {
   return trueRank(jobs).filter((e) => e.rank <= top || (e.fit ?? e.quick_score ?? 0) >= 4);
 }
@@ -87,7 +106,7 @@ export function worthALook(jobs, top = 100) {
 /**
  * "New since you last looked": postings worth a look whose stable first_seen_at (set once at
  * first ingest, data/first-seen.json) is after the last visit. Jobs with no first-seen time yet
- * are not new. Newest first, then by True rank.
+ * are not new. Ordered by Best overall.
  */
 export function newSince(worth, firstSeen, lastVisit) {
   if (!lastVisit) return [];
@@ -138,15 +157,16 @@ export function lastScanAt(tsv) {
  * Everything Home's "Needs you", "In flight" and "New since you last looked" cards show, from
  * already-read inputs. Home (components/hunt/home.tsx) and GET /api/profile/home both call
  * this, so the API cannot drift from the page.
- * @param {{ tracker?: any[], threads?: any[], followups?: any[], jobs?: Record<string, any>, firstSeen?: Record<string, string>, lastVisit?: string | null, now?: number }} [input]
+ * @param {{ tracker?: any[], threads?: any[], followups?: any[], jobs?: Record<string, any>, firstSeen?: Record<string, string>, lastVisit?: string | null, inboxNeeds?: any[] | null, now?: number }} [input]
  */
-export function homeSections({ tracker = [], threads = [], followups = [], jobs = {}, firstSeen = {}, lastVisit = null, now = Date.now() } = {}) {
+export function homeSections({ tracker = [], threads = [], followups = [], jobs = {}, firstSeen = {}, lastVisit = null, inboxNeeds = null, now = Date.now() } = {}) {
   const flying = inFlight(tracker);
+  const progress = inProgress(tracker);
   const worth = worthALook(jobs, 100).filter((e) => e.source !== "tracker");
   const fresh = newSince(worth, firstSeen, lastVisit);
   const newTop = fresh.filter((e) => e.rank <= 20 && !e.report?.tracker);
-  const needs = needsYou({ tracker, threads, followups, newTop, now });
-  return { needs, flying, fresh, newTop };
+  const needs = needsYou({ tracker, threads, followups, newTop, inboxNeeds, now });
+  return { needs, flying, progress, fresh, newTop };
 }
 
 /**

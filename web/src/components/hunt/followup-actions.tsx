@@ -13,7 +13,7 @@ export function FollowupActions({ oppKey, lastDate, mark }: { oppKey: string; la
     try {
       const res = await fetch("/api/profile/marks", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ op: "mark", id: `opp:${oppKey}`, mark: value, lastDate }) });
       if (!res.ok) throw new Error(String(res.status));
-      if (value) router.push("/followups"); else router.refresh();
+      if (value) router.push("/inbox"); else router.refresh();
     } catch { setError(true); } finally { setBusy(false); }
   };
   const btn = "inline-flex min-h-[44px] items-center justify-center rounded-lg border border-border px-5 text-sm font-medium text-foreground hover:bg-surface-hover disabled:opacity-50";

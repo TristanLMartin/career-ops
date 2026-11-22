@@ -23,7 +23,7 @@ import {
   DEFAULT_WEIGHTS, DEFAULT_PAY_BAND, LOCATION_TIER_SCORE,
   locationTier, parsePay, payScore, benefitFlags, benefitScore,
   relevanceTargets, relevanceScore, parseFit, fitToPct, composite, levelFit, DEFAULT_BIG_COMPANIES,
-  payFromDescription, relevanceV2, relevanceDomains, groupKey, parseHnHeader, companyBoost, boostedComposite, configureRankRules, hasRelevanceRules, normalizeTarget, onTarget, levelOnTarget, placeOnTarget,
+  payFromDescription, relevanceV2, relevanceDomains, groupKey, parseHnHeader, companyBoost, boostedComposite, configureRankRules, hasRelevanceRules, normalizeTarget, onTarget, levelOnTarget, placeOnTarget, shortlistLevelOk,
 } from "../lib/hunt-rank.mjs";
 import { readPerson } from "../lib/profile-paths.mjs";
 import { updateFirstSeen } from "../lib/hunt-first-seen.mjs";
@@ -45,15 +45,33 @@ function readText(p) {
   try { return fs.readFileSync(p, "utf8"); } catch { return ""; }
 }
 
+/** A group copy inherits its leader's fit only at the same level and location tier. */
+export function sameLevelAndPlace(e, lead) {
+  return (e?.level?.key ?? "senior") === (lead?.level?.key ?? "senior") && (e?.locationTier ?? null) === (lead?.locationTier ?? null);
+}
+
+/**
+ * Sort comparator for a duplicate group's urls, leader first: one at a usable level and place;
+ * then the best own fit score (unscored last); then the most complete JD (not thin), with posted
+ * pay; then composite; then JD length.
+ */
+export function groupLeaderOrder(out, target = null) {
+  const t = normalizeTarget(target);
+  const usable = (e) => onTarget(e, t) && !e.belowFloor;
+  const fitOf = (e) => (typeof e.fit === "number" ? e.fit : -1);
+  return (a, b) => usable(out[b]) - usable(out[a]) || fitOf(out[b]) - fitOf(out[a]) || !out[b].relevanceEst - !out[a].relevanceEst || (out[b].pay != null) - (out[a].pay != null) || (out[b].composite ?? -1) - (out[a].composite ?? -1) || (out[b].jdChars ?? 0) - (out[a].jdChars ?? 0);
+}
+
 export function loadRankingConfig(rootDir = root) {
   const file = path.join(rootDir, "config", "ranking.yml");
   let cfg = {};
   try { cfg = loadYaml(readText(file)) ?? {}; } catch (e) { console.warn(`ranking.yml unreadable, using defaults: ${e.message}`); }
   const weights = { ...DEFAULT_WEIGHTS, ...(cfg.weights ?? {}) };
   const band = { ...DEFAULT_PAY_BAND, ...(cfg.pay_band ?? {}) };
-  // Level: profile_rules.level.rules (a ladder for any field) when present, else the built-in IC ladder.
+  // Level: profile_rules.level.rules (a ladder for any field) when present, else the built-in IC
+  // ladder; level.no_title_levels: companies whose plain titles carry no level (read as target).
   const pl = cfg.profile_rules?.level ?? {};
-  const level = { bigCompanies: cfg.level?.big_companies ?? [...DEFAULT_BIG_COMPANIES], factors: cfg.level?.factors ?? {}, rules: Array.isArray(pl.rules) || pl.default ? (pl.rules ?? []) : undefined, defaultLevel: pl.default };
+  const level = { bigCompanies: cfg.level?.big_companies ?? [...DEFAULT_BIG_COMPANIES], factors: cfg.level?.factors ?? {}, noTitleLevels: cfg.level?.no_title_levels ?? [], rules: Array.isArray(pl.rules) || pl.default ? (pl.rules ?? []) : undefined, defaultLevel: pl.default };
   const tcBand = { ...DEFAULT_TC_BAND, ...(cfg.tc_band ?? {}) };
   // pay_basis: base (default) scores the posting's base midpoint; tc scores tc_est when its
   // confidence is medium or high, falling back to the base midpoint.
@@ -161,7 +179,30 @@ export function reportSummary(md) {
   const leadText = lead.replace(/^\*\*[^*]+\*\*\s*/, "").replace(/\s+/g, " ");
   const why = (leadText.match(/^(.+?[.!?])(\s|$)/)?.[1] ?? leadText).slice(0, 220) || first(y.top_strengths);
   const gap = first(y.hard_stops) || first(y.soft_gaps) || "";
-  return { decision, why, gap: gap.slice(0, 200), strength: first(y.top_strengths).slice(0, 200), nextAction: String(y.next_action ?? "").slice(0, 220), advertisedComp: y.advertised_comp ?? null };
+  return { decision, why, gap: gap.slice(0, 200), strength: first(y.top_strengths).slice(0, 200), nextAction: String(y.next_action ?? "").slice(0, 220), advertisedComp: y.advertised_comp ?? null, level: levelAssessment(text, decision) };
+}
+
+/**
+ * hunt: does the report say the candidate meets a Staff+ posting's level? No AI, read from the
+ * report text. Below the bar: a level/Staff/title requirement row marked ❌ Missing, or the words
+ * "level mismatch" / "level-mismatch". Meets: otherwise, when the verdict is Apply (not Consider).
+ * `why` quotes the report's own sentence. Null when the report says nothing about a Staff level.
+ */
+export function levelAssessment(md, decision = "") {
+  const text = String(md ?? "");
+  const section = text.match(/^## C\)[^\n]*\n([\s\S]*?)(?=\n## )/m)?.[1] ?? "";
+  if (!/\b(staff|principal|level)\b/i.test(section + text.slice(0, 3000))) return null;
+  const clean = (s) => String(s).replace(/\*\*|`/g, "").replace(/\s+/g, " ").trim().slice(0, 200);
+  const sentences = (s) => String(s).replace(/^\s*(\d+\.|-|\*)\s+/gm, " ").replace(/\*\*|`/g, "").replace(/\s+/g, " ").split(/(?<=[.!?])\s+(?=[A-Z])/).filter((x) => x.length > 12);
+  const missRow = text.split("\n").find((l) => /^\|/.test(l) && /❌/.test(l) && /\b(staff\+?|principal|level|title)\b/i.test(String(l.split("|")[1] ?? "").replace(/\bC-level\b/gi, "")));
+  const mismatch = sentences(text).find((x) => /level[- ]mismatch/i.test(x));
+  if (missRow) {
+    const cells = missRow.split("|").map((c) => c.trim()).filter(Boolean);
+    return { meets: false, why: clean(`${cells[0]}: missing. ${cells[cells.length - 1] ?? ""}`) };
+  }
+  if (mismatch) return { meets: false, why: clean(mismatch) };
+  const said = sentences(section).find((x) => /stretch|above|one (band|level)/i.test(x)) ?? sentences(section)[0] ?? "";
+  return /^(strong )?apply/i.test(String(decision)) ? { meets: true, why: clean(said) } : { meets: false, why: clean(said || `Verdict ${decision}`) };
 }
 
 function reportFileFromCell(cell) {
@@ -302,9 +343,16 @@ export async function enrich() {
   let profile = {};
   try { profile = loadYaml(readText(getProfilePath(root))) ?? {}; } catch {}
   const targets = relevanceTargets(profile, readText(path.join(root, "cv.md")));
+  // Best overall's half-tier boost (web/src/lib/hunt-rank-order.mjs tierUnits): the profile's
+  // favorite and stretch companies (config/profile.yml narrative.preferences).
+  const prefs = profile?.narrative?.preferences ?? {};
+  const rankBoostCos = new Set([...(prefs.favorite_companies ?? []), ...(prefs.stretch_companies ?? [])].map((c) => normCompany(canonicalCompany(String(c), aliases))));
 
   const inbox = parsePipeline(readText(path.join(root, "data", "pipeline.md"))).map((r) => ({ ...r, rawCompany: r.company, company: canonicalCompany(r.company, aliases) }));
   const tracker = readTracker();
+  // hunt: the fit before a re-evaluation on another model (scripts/hunt-reeval.mjs).
+  let prevFits = {};
+  try { prevFits = JSON.parse(readText(path.join(root, "data", "hunt-prev-fit.json")) || "{}"); } catch {}
   const fitByUrl = new Map();
   const statusByUrl = new Map();
   const reportByUrl = new Map();
@@ -320,7 +368,9 @@ export async function enrich() {
   const seen = new Set(inbox.map((r) => r.url));
   for (const t of tracker) {
     if (!t.url || seen.has(t.url)) continue;
-    all.push({ url: t.url, company: t.company, role: t.role, location: t.location ?? "", comp: "", posted: "", source: "tracker" });
+    // hunt: the posting date the scan wrote into the tracker notes ("posted: 2024-06-14").
+    const posted = String(t.notes ?? "").match(/posted:\s*(\d{4}-\d{2}-\d{2})/)?.[1] ?? "";
+    all.push({ url: t.url, company: t.company, role: t.role, location: t.location ?? "", comp: "", posted, source: "tracker" });
   }
 
   let portals = {};
@@ -499,6 +549,8 @@ export async function enrich() {
       caution: caution.has(normCompany(r.company)) || undefined,
       identityUnverified: unverified.has(String(r.company).trim().toLowerCase()) || undefined,
       companyStage: compEntry?.stage ?? undefined,
+      // hunt: the board's posting date (YYYY-MM-DD), for the "Posted Nmo ago" chip and stale demotion.
+      postedAt: /^\d{4}-\d{2}-\d{2}$/.test(String(r.posted ?? "")) ? r.posted : undefined,
       stabilityNote: compEntry?.stabilityNote ?? undefined,
       locationTier: tier,
       locationLabel: tier ? locationLabels[tier] : undefined,
@@ -507,15 +559,19 @@ export async function enrich() {
       relevanceEst: desc.trim().length < THIN_JD_CHARS || undefined,
       level: { key: level.key, label: level.label, factor: level.factor },
       fit,
+      // hunt: a job that was scored only through its group keeps that group score as prev_fit.
+      prev_fit: prevFits[r.url]?.reeval_ok ? (typeof prevFits[r.url].prev_fit === "number" ? prevFits[r.url].prev_fit : typeof prevFits[r.url].prev_group_fit === "number" ? prevFits[r.url].prev_group_fit : undefined) : undefined,
+      fitModel: prevFits[r.url]?.reeval_ok ? prevFits[r.url].reeval_model : undefined,
       report: reportByUrl.get(r.url) ?? null,
       parts,
       composite: boostedComposite(parts, weights, companyBoost(r.company, boosts)),
       boost: companyBoost(r.company, boosts) || undefined,
+      rankBoost: rankBoostCos.has(normCompany(r.company)) || undefined,
       hasDescription: !!desc,
       jdChars: desc.length || undefined,
     };
   }
-  // Groups: one leader per company + base title (scored first, then composite).
+  // Groups: one leader per company + base title (on-target level/place, then best own fit, then composite).
   const groups = new Map();
   for (const [url, e] of Object.entries(out)) {
     if (!groups.has(e.group)) groups.set(e.group, []);
@@ -524,17 +580,16 @@ export async function enrich() {
   const shortlistCfg = { minRelevance: Number(rankingShortlist?.min_relevance ?? 52) };
   let shortlisted = 0;
   for (const urls of groups.values()) {
-    // Representative: a scored posting first; then one at a usable level and place; then the
-    // most complete JD (not thin), with posted pay; then composite.
-    const usable = (e) => onTarget(e, target) && !e.belowFloor;
-    urls.sort((a, b) => (out[b].fit != null) - (out[a].fit != null) || usable(out[b]) - usable(out[a]) || !out[b].relevanceEst - !out[a].relevanceEst || (out[b].pay != null) - (out[a].pay != null) || (out[b].composite ?? -1) - (out[a].composite ?? -1) || (out[b].jdChars ?? 0) - (out[a].jdChars ?? 0));
+    urls.sort(groupLeaderOrder(out, target));
     urls.forEach((u, i) => { out[u].groupSize = urls.length; out[u].groupLeader = i === 0; out[u].groupUrls = i === 0 ? urls.slice(1) : undefined; });
     const lead = out[urls[0]];
-    // Like-for-like children inherit the representative's fit ("scored via group").
+    // Like-for-like children inherit the representative's fit ("scored via group"); a member at
+    // a different level or place is a different job, so it stays unevaluated (its quick score shows).
     if (lead.fit != null) {
       for (const u of urls.slice(1)) {
         const e = out[u];
         if (e.fit != null) continue;
+        if (!sameLevelAndPlace(e, lead)) continue;
         e.fit = lead.fit;
         e.fitVia = "group";
         e.fitFrom = urls[0];
@@ -542,10 +597,13 @@ export async function enrich() {
         e.composite = boostedComposite(e.parts, weights, e.boost ?? 0);
       }
     }
-    const levelOk = levelOnTarget(lead, target);
+    // A group can bundle different roles (company + base title); its best own evaluation counts,
+    // so a 4.0+ member is not hidden behind a weaker leader.
+    const bestOwnFit = Math.max(-1, ...urls.map((u) => (out[u].fitVia !== "group" && typeof out[u].fit === "number" ? out[u].fit : -1)));
+    const levelOk = shortlistLevelOk(lead, target) || shortlistLevelOk({ fit: bestOwnFit, level: { key: "" } }, target);
     const placeOk = placeOnTarget(lead, target);
     const open = !["Rejected", "Discarded", "SKIP", "Hired"].includes(String(lead.status ?? "")) && !/^(skip|discard)/i.test(String(lead.report?.decision ?? ""));
-    const ok = open && levelOk && placeOk && !lead.contract && !lead.belowFloor && (lead.fit != null ? lead.fit >= 3.5 : (!lead.relevanceEst && (lead.relevance ?? 0) >= shortlistCfg.minRelevance) || (lead.boost ?? 0) > 0);
+    const ok = open && levelOk && placeOk && !lead.contract && !lead.belowFloor && (lead.fit != null ? Math.max(lead.fit, bestOwnFit) >= 3.5 : (!lead.relevanceEst && (lead.relevance ?? 0) >= shortlistCfg.minRelevance) || (lead.boost ?? 0) > 0);
     for (const u of urls) { out[u].shortlist = ok && u === urls[0]; out[u].groupShortlist = ok; }
     if (ok) shortlisted++;
   }

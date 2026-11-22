@@ -6,6 +6,7 @@ import { useJobs } from "@/components/jobs/job-store";
 import { evaluationGateForJob, jobStateLabel } from "@/lib/job-gate.mjs";
 import { pillTone } from "@/components/jobs/worker-pills";
 import { cn } from "@/lib/cn";
+import { ModelRuns } from "@/components/hunt/model-runs"; // hunt
 
 const TONE_CHIP = {
   good: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-400",
@@ -23,7 +24,7 @@ export default function JobsHistory() {
         <div>
           <h1 className="font-display text-2xl tracking-tight text-landing">Workers</h1>
           <p className="mt-1 text-sm text-muted">
-            AI runs started from this dashboard, kept in this browser. <span className="tabular-nums">{jobs.length}</span> total.
+            Runs started from this browser, with live progress. <span className="tabular-nums">{jobs.length}</span> total. Model runs below lists every run, wherever it started.
           </p>
         </div>
         {jobs.some((j) => j.status !== "running") && (
@@ -38,13 +39,13 @@ export default function JobsHistory() {
 
       {jobs.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-border bg-surface/30 px-6 py-12 text-center text-sm text-muted">
-          No workers yet. Hit <span className="text-foreground">Evaluate</span> on an inbox posting to start one.
+          No runs started from this browser yet. Hit <span className="text-foreground">Evaluate</span> on a job to start one.
           <span className="mt-2 block">
-            Ran an evaluation from your AI CLI? It shows up in{" "}
-            <Link href="/pipeline?tab=ALL" className="text-foreground underline-offset-2 hover:underline">
-              Pipeline
+            Runs from the nightly jobs and scripts are listed under Model runs below; saved evaluations are in{" "}
+            <Link href="/pipeline" className="text-foreground underline-offset-2 hover:underline">
+              Jobs
             </Link>
-            , not here.
+            .
           </span>
         </div>
       ) : (
@@ -82,6 +83,8 @@ export default function JobsHistory() {
           })}
         </ul>
       )}
+      {/* hunt: every model run, including the ones no browser started */}
+      <ModelRuns />
     </div>
   );
 }

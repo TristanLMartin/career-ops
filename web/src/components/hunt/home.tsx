@@ -1,5 +1,5 @@
 // Home: the job search at a glance, in five compact blocks.
-// 1 Needs you · 2 In flight · 3 Today's study · 4 New since you last looked · 5 a one-line footer.
+// 1 Needs you · 2 In progress · 3 Today's study · 4 New since you last looked · 5 a one-line footer.
 // Server component; reads local files only (plus data/home-last-visit.json, which it updates).
 // Every row is fully tappable (stretched link). No names are hard-coded here.
 import fs from "node:fs";
@@ -10,7 +10,7 @@ import { readInbox } from "@/lib/career-ops";
 import { pendingInbox } from "@/lib/inbox-pending.mjs";
 import { readScanRuns } from "@/lib/hunt-data";
 import { loadHomeSections } from "@/lib/hunt-home-data";
-import { daysSince, lastScanAt, weekCost } from "@/lib/hunt-home-v2.mjs";
+import { lastScanAt, weekCost } from "@/lib/hunt-home-v2.mjs";
 import { normalizeState } from "@/lib/hunt-study.mjs";
 import { currentDay, designPromptIndex, parseDays } from "@/lib/hunt-study-days.mjs";
 import type { Prompt, StudyDayT } from "@/components/hunt/study-v2";
@@ -18,19 +18,12 @@ import { shortWhen } from "@/lib/hunt-message-kinds.mjs";
 import type { HuntEnrichment } from "@/lib/hunt-types";
 import { StudyToday } from "@/components/hunt/study-today";
 import { HomeVisit } from "@/components/hunt/home-visit";
+import { InProgressRows } from "@/components/hunt/in-progress-lane";
 import { cn } from "@/lib/cn";
+import { readSpotchecks } from "@/lib/hunt-model-runs.mjs";
 
 type Ranked = HuntEnrichment & { url: string; rank: number };
 type Row = { n: string; company: string; role: string; status: string; updated: string; next: string };
-
-const PILL: Record<string, string> = {
-  Offer: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",
-  Interview: "bg-violet-500/15 text-violet-800 dark:text-violet-300",
-  Assessment: "bg-sky-500/15 text-sky-800 dark:text-sky-300",
-  Responded: "bg-sky-500/15 text-sky-800 dark:text-sky-300",
-  Applied: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
-  Speculative: "bg-pink-500/15 text-pink-800 dark:text-pink-300",
-};
 
 function read(root: string, rel: string): string {
   try { return fs.readFileSync(path.join(root, rel), "utf8"); } catch { return ""; }
@@ -64,8 +57,8 @@ function RowLink({ href, external, children, className }: { href: string; extern
 }
 
 export function HuntHome() {
-  const { root, applications, needs, flying: flyingRows, fresh: freshRows } = loadHomeSections();
-  const flying = flyingRows as Row[];
+  const { root, applications, needs, progress: progressRows, fresh: freshRows } = loadHomeSections();
+  const flying = progressRows as Row[];
   const fresh = freshRows as Ranked[];
 
   const md = read(root, "data/study/days.md");
@@ -78,6 +71,7 @@ export function HuntHome() {
   const scanAt = lastScanAt(readScanRuns(root));
   const inboxCount = pendingInbox(readInbox(applications)).length;
   const cost = weekCost(read(root, "data/hunt-usage.tsv"));
+  const spot = readSpotchecks(root); // hunt: Opus spot-checks of lite scores (comparison only)
 
   return (
     <div className="mx-auto max-w-3xl space-y-3 px-4 py-4 sm:px-6 sm:py-6">
@@ -101,33 +95,18 @@ export function HuntHome() {
             {needs.length > 4 && (
               <li className={cn("px-1 pt-1.5 text-xs text-faint", needs.length <= 6 && "sm:hidden")}>
                 <span className="sm:hidden">+{needs.length - 4}</span><span className="max-sm:hidden">+{needs.length - 6}</span> more on{" "}
-                <Link href="/messages" className="text-muted underline-offset-2 hover:underline">Messages</Link> and{" "}
-                <Link href="/followups" className="text-muted underline-offset-2 hover:underline">Follow-ups</Link>
+                <Link href="/inbox" className="text-muted underline-offset-2 hover:underline">Inbox</Link>
               </li>
             )}
           </ul>
         )}
       </Card>
 
-      <Card title="In flight" right={flying.length > 0 ? <Link href="/tracker" className="inline-flex min-h-[32px] items-center text-xs text-muted hover:text-foreground">View tracker</Link> : null}>
+      <Card title="In progress" right={flying.length > 0 ? <Link href="/tracker" className="inline-flex min-h-[32px] items-center text-xs text-muted hover:text-foreground">View tracker</Link> : null}>
         {flying.length === 0 ? (
-          <p className="py-1 text-sm text-muted">No applications in flight yet.</p>
+          <p className="py-1 text-sm text-muted">Nothing in progress yet.</p>
         ) : (
-          <ul className="-mx-1 divide-y divide-border">
-            {flying.slice(0, 6).map((r) => {
-              const d = daysSince(r.updated);
-              return (
-                <li key={r.n} className="tap-row flex min-h-[44px] items-center gap-2 rounded-md px-1 py-1.5">
-                  <RowLink href={`/pipeline/${encodeURIComponent(r.n)}`} className="min-w-0 flex-1">
-                    <span className="block truncate text-sm"><span className="font-medium text-foreground">{r.company}</span><span className="text-muted"> · {r.role}</span></span>
-                    <span className="block truncate text-xs text-muted">{r.next ? `Next: ${r.next}` : "No next step"}</span>
-                  </RowLink>
-                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", PILL[r.status] ?? "bg-surface-hover text-muted")}>{r.status}</span>
-                  <span className="w-8 shrink-0 text-right text-xs tabular-nums text-faint" title="Days since last update">{d == null ? "" : `${d}d`}</span>
-                </li>
-              );
-            })}
-          </ul>
+          <InProgressRows rows={flying} limit={6} />
         )}
         {flying.length > 6 && <Link href="/tracker" className="mt-1 inline-flex min-h-[44px] items-center text-xs text-muted hover:text-foreground">View tracker ({flying.length})</Link>}
       </Card>
@@ -141,7 +120,7 @@ export function HuntHome() {
           )}
         </Card>
 
-        <Card title="New since you last looked" right={fresh.length > 0 ? <Link href="/pipeline?sort=newest" className="inline-flex min-h-[32px] items-center text-xs text-muted hover:text-foreground">See all</Link> : null}>
+        <Card title="New since you last looked · by Rank" right={fresh.length > 0 ? <Link href="/pipeline?sort=newest" className="inline-flex min-h-[32px] items-center text-xs text-muted hover:text-foreground">See all</Link> : null}>
           {fresh.length === 0 ? (
             <p className="py-1 text-sm text-muted">Nothing new in the top 100 since your last visit.</p>
           ) : (
@@ -150,7 +129,7 @@ export function HuntHome() {
                 const score = e.fit ?? e.quick_score;
                 return (
                   <li key={e.url} className="tap-row flex min-h-[44px] items-center gap-2 rounded-md px-1 py-1.5">
-                    <RowLink href={e.report?.tracker ? `/pipeline/${e.report.tracker}` : e.url} external={!e.report?.tracker} className="min-w-0 flex-1">
+                    <RowLink href={e.report?.tracker ? `/pipeline/${e.report.tracker}` : `/pipeline/posting?url=${encodeURIComponent(e.url)}`} className="min-w-0 flex-1">
                       <span className="block truncate text-sm"><span className="font-medium text-foreground">{e.company}</span><span className="text-muted"> · {e.displayRole ?? e.role}</span></span>
                       <span className="block truncate text-xs text-faint">#{e.rank}{shortPay(e) ? ` · ${shortPay(e)}` : ""}</span>
                     </RowLink>
@@ -164,8 +143,14 @@ export function HuntHome() {
       </div>
 
       <p className="px-1 text-[11px] text-faint" suppressHydrationWarning>
-        {scanAt ? `Last scan ${shortWhen(scanAt)}` : "No scan yet"} · {inboxCount.toLocaleString("en-US")} in inbox · ${cost.toFixed(2)} this week
+        {scanAt ? `Last scan ${shortWhen(scanAt)}` : "No scan yet"} · {inboxCount.toLocaleString("en-US")} in inbox · <Link href="/jobs" className="hover:text-brand-text hover:underline">${cost.toFixed(2)} this week</Link>
       </p>
+      {spot && (
+        <p className={cn("px-1 text-[11px]", spot.warn ? "text-amber-800 dark:text-amber-400" : "text-faint")}>
+          Opus spot-checks: {spot.n} job{spot.n === 1 ? "" : "s"}, avg gap {spot.meanAbsGap.toFixed(2)}
+          {spot.warn ? " (over 0.5: lite scores are drifting from Opus, worth a look)" : ""}
+        </p>
+      )}
     </div>
   );
 }

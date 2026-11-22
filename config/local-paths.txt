@@ -95,3 +95,12 @@ scripts/install-hooks.sh
 .secret-scan-allow
 .gitleaks.toml
 scripts/hunt-profile-boards.mjs
+config/portal-cuts.example.yml
+lib/hunt-tailor-fact-gate.mjs
+lib/hunt-tailor-prompts.mjs
+modes/oferta-lite.md
+scripts/hunt-job-filters.mjs
+scripts/hunt-liveness.mjs
+scripts/hunt-reeval.mjs
+scripts/hunt-set-score.mjs
+scripts/hunt-tailor-run.mjs

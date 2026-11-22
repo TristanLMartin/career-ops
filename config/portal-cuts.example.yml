@@ -1,0 +1,7 @@
+# Companies you never want monitored again. Copy to config/portal-cuts.yml (gitignored).
+# scripts/hunt-discover.mjs leaves these out of data/discovery-boards.yml and never re-adds them;
+# scripts/hunt-discover-wide.mjs leaves them out of data/discovery-targets.yml. Matching is by
+# company name, case-insensitive. Remove a name here to bring it back on the next discovery run.
+cut:
+  - Example Corp        # e.g. zero postings ever seen
+  - Another Startup     # e.g. nothing at your level or pay

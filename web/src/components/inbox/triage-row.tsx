@@ -5,21 +5,19 @@ import { Bookmark, BookmarkCheck, Loader2, X, CirclePause } from "lucide-react";
 import type { InboxJob } from "@/lib/career-ops";
 import type { AtsSource } from "@/lib/explore";
 import { ATS_LABEL } from "@/lib/explore";
-import { postingUrl, unscoredInboxHref } from "@/lib/posting-url.mjs";
+import { unscoredInboxHref } from "@/lib/posting-url.mjs";
+import { rowTarget } from "./triage-row-target.mjs"; // hunt
 import { Badge } from "@/components/ui/badge";
 import { CompanyLogo } from "@/components/company-logo";
 import { cn } from "@/lib/cn";
 import { inboxScoreTarget } from "@/lib/inbox-score-target.mjs";
 // hunt: ranking badges from data/hunt-enrich.json
-import { RankBadges } from "@/components/hunt/rank-badges";
+import { CardMeta, RankBadges } from "@/components/hunt/rank-badges";
 import { ReferralIconLink } from "@/components/hunt/referral-links";
 import type { HuntEnrichment } from "@/lib/hunt-types";
 
-/** hunt: where a click on the row (outside its buttons) goes: the report, else the posting. */
-export function rowTarget(scoreHref: string | null, url: string): string | null {
-  if (scoreHref && scoreHref.startsWith("/pipeline/")) return scoreHref;
-  return postingUrl(url) || null;
-}
+// hunt: where a row click goes (report, else the job's detail page): ./triage-row-target.mjs
+export { rowTarget } from "./triage-row-target.mjs";
 
 export type RowScore = { score: number | null; tone: "good" | "warn" | "bad" | "muted"; jobId: string; running: boolean; reportN?: number | null; needsReview?: boolean };
 
@@ -78,8 +76,11 @@ export function TriageRow({
   // posting. Never a worker page (/jobs/…): "Needs review" and "Scoring…" keep their own links.
   const rowHref = rowTarget(target.href, job.url);
   const rowExternal = rowHref != null && !rowHref.startsWith("/");
+  // hunt: line 1 is "#N" (Best overall) + Company · Role; line 2 one meta line; one chip at most.
+  const tr = (job as InboxJob & { hunt?: HuntEnrichment | null }).hunt ?? null;
   const title = (
     <>
+      {tr?.rankNo != null && <span className="mr-1.5 font-semibold tabular-nums text-brand-text">#{tr.rankNo}</span>}
       <span className="font-medium text-foreground">{job.company}</span>
       <span className="text-muted"> · {(job as InboxJob & { hunt?: HuntEnrichment | null }).hunt?.displayRole ?? job.role}</span>
     </>
@@ -122,6 +123,12 @@ export function TriageRow({
             title
           )}
         </p>
+        {tr ? (
+          <p className="mt-0.5 flex min-w-0 items-center gap-2 text-[11px] text-faint">
+            <CardMeta e={tr} age={ago} />
+            <ReferralIconLink company={job.company} />
+          </p>
+        ) : (
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-faint">
           {job.location && <span className="truncate">{job.location}</span>}
           {source && <span className="rounded bg-surface-hover px-1 py-px font-medium text-muted">{ATS_LABEL[source]}</span>}
@@ -130,8 +137,9 @@ export function TriageRow({
           {!evaluated && <span className="italic text-muted">not scored</span>}
           <ReferralIconLink company={job.company} />
         </p>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <RankBadges e={(job as InboxJob & { hunt?: HuntEnrichment | null }).hunt} />
+        )}
+        <div className="mt-1 flex flex-wrap items-center gap-2 empty:hidden">
+          <RankBadges e={tr} />
           {similar > 0 && onToggleSimilar && (
             <button type="button" onClick={onToggleSimilar} aria-expanded={similarOpen} className="tap-44 text-[11px] font-medium text-brand-text hover:underline">
               {similarOpen ? "hide similar" : `+${similar} similar`}

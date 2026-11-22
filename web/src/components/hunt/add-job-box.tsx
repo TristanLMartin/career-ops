@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { RankBadges } from "@/components/hunt/rank-badges";
+import { RankDetails } from "@/components/hunt/rank-badges";
 import type { HuntEnrichment } from "@/lib/hunt-types";
 
 type Result =
@@ -117,7 +117,7 @@ export function AddJobBox({ compact = false }: { compact?: boolean }) {
         <div className="mt-3 rounded-md bg-emerald-500/10 p-3 text-sm">
           <p className="font-medium text-foreground">Added: {result.job.company} · {result.job.title}</p>
           {result.note && <p className="mt-0.5 text-xs text-muted">{result.note}</p>}
-          <div className="mt-1.5"><RankBadges e={result.enrichment} /></div>
+          <div className="mt-1.5"><RankDetails e={result.enrichment} /></div>
           <div className="mt-2 flex items-center gap-3 text-xs">
             {score.state === "idle" && (
               <button type="button" onClick={() => void scoreFit(result.job.url)} className="rounded-md border border-border px-2.5 py-1 font-medium text-brand-text hover:bg-surface-hover">Score fit (about 3 min)</button>

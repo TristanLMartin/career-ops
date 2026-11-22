@@ -130,6 +130,8 @@ export function mapPoints(jobs, opts = {}) {
       title: e.displayRole || e.role || "",
       location: e.location ?? "",
       base: e.pay && e.pay.currency === "USD" ? [e.pay.annualMin, e.pay.annualMax] : null,
+      // posted hourly rate ($/hr), kept so the chart can say "hourly" next to the annualized figure
+      hourly: e.pay && e.pay.currency === "USD" && e.pay.period === "hour" ? [e.pay.min, e.pay.max] : null,
       basis: e.pay?.basis ?? null,
       tc: e.tc_est?.usd ?? null,
       tcConfidence: e.tc_est?.confidence ?? null,
@@ -158,4 +160,40 @@ export function payTicks(min, max) {
   const out = [];
   for (let v = lo; v <= hi; v += step) out.push(v);
   return out;
+}
+
+/**
+ * Value at quantile q (0-1) of an ascending array, nearest rank rounded toward the middle, so a
+ * lone outlier at either end is never interpolated into the domain.
+ */
+function quantile(sorted, q) {
+  if (!sorted.length) return NaN;
+  const i = (sorted.length - 1) * q;
+  return sorted[q > 0.5 ? Math.floor(i) : Math.ceil(i)];
+}
+
+/**
+ * A robust axis domain: about the 2nd-98th percentile of the values, padded by `pad` of the
+ * span (at least `minPad`), widened to include `include` (e.g. the pay floor), and clamped to
+ * [hardMin, hardMax]. Values outside it are drawn at the edge with an off-scale marker, so one
+ * bad parse ($832k "hourly") can't squash every other point.
+ * @param {number[]} values
+ * @param {{ lo?: number, hi?: number, pad?: number, minPad?: number, include?: (number|null|undefined)[], hardMin?: number, hardMax?: number, fallback?: [number, number] }} [opts]
+ * @returns {[number, number]}
+ */
+export function robustDomain(values, { lo = 0.02, hi = 0.98, pad = 0.08, minPad = 0, include = [], hardMin = -Infinity, hardMax = Infinity, fallback = [0, 1] } = {}) {
+  const v = (values ?? []).filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
+  const extra = (include ?? []).filter((x) => Number.isFinite(x));
+  if (!v.length && !extra.length) return fallback;
+  // Small samples: percentiles of a handful of points are just the extremes.
+  let a = v.length >= 10 ? quantile(v, lo) : (v[0] ?? extra[0]);
+  let b = v.length >= 10 ? quantile(v, hi) : (v[v.length - 1] ?? extra[0]);
+  for (const x of extra) { a = Math.min(a, x); b = Math.max(b, x); }
+  const p = Math.max((b - a) * pad, minPad);
+  return [Math.max(hardMin, a - p), Math.min(hardMax, b + p)];
+}
+
+/** "low" / "high" when a value is outside the domain (drawn pinned to that edge), else null. */
+export function offScale(v, [a, b]) {
+  return v < a ? "low" : v > b ? "high" : null;
 }

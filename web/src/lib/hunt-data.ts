@@ -11,6 +11,9 @@ import type { HuntEnrichment, HuntMessage } from "@/lib/hunt-types";
 import { dedupeLinkedInPeople, needsReply } from "@/lib/hunt-messages-view.mjs";
 import { autoClear, followupRows, markState, normalizeMarks, threadRows } from "@/lib/hunt-message-kinds.mjs";
 import { buildOpportunities, domainWord, normCo } from "@/lib/hunt-followups.mjs";
+import { atsActionAsk, inboxSections } from "@/lib/hunt-inbox.mjs";
+import { rankSettings } from "@/lib/hunt-rank-order.mjs";
+import { applySignals } from "@/lib/hunt-job-signals.mjs";
 import { parseStatusLog, trackerRows } from "@/lib/hunt-tracker.mjs";
 
 /** Profile-specific labels hunt-enrich writes next to the jobs (config/ranking.yml, person.yml). */
@@ -23,11 +26,26 @@ export type HuntEnrichDoc = {
   display: HuntDisplay | null;
 };
 
+/** A small JSON signal file: missing reads as null; a malformed one is reported and ignored. */
+function readSignalFile(file: string): Record<string, any> | null {
+  let text: string;
+  try { text = fs.readFileSync(file, "utf8"); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") console.warn(`${path.basename(file)}: ${(e as Error).message}`);
+    return null;
+  }
+  try { return JSON.parse(text); } catch (e) { console.warn(`${path.basename(file)} is not valid JSON: ${(e as Error).message}`); return null; }
+}
+
 export function readHuntEnrichment(root: string = careerOpsRoot()): HuntEnrichDoc {
   const file = path.join(root, "data", "hunt-enrich.json");
   try {
     const doc = JSON.parse(fs.readFileSync(file, "utf8"));
-    return { generatedAt: doc.generatedAt ?? null, weights: doc.weights ?? {}, jobs: doc.jobs ?? {}, display: doc.display ?? null };
+    // The user's ratings, posting liveness and posted age, layered on at read time.
+    const jobs = applySignals(doc.jobs ?? {}, {
+      ratings: readSignalFile(path.join(root, "data", "hunt-ratings.json"))?.ratings ?? {},
+      liveness: readSignalFile(path.join(root, "data", "hunt-liveness.json"))?.checks ?? {},
+    });
+    return { generatedAt: doc.generatedAt ?? null, weights: doc.weights ?? {}, jobs, display: doc.display ?? null };
   } catch {
     return { generatedAt: null, weights: {}, jobs: {}, display: null };
   }
@@ -123,6 +141,16 @@ export function readThreadRows(root: string = careerOpsRoot()): { rows: ThreadRo
   // interviews, is a recruiter for that company (not "other"), unless he set the kind himself.
   const contacts = readContacts(root);
   const trackerCos = new Set(readApplications().map((a) => normCo(a.company)).filter((c) => c.length >= 3));
+  // ATS / hiring-team mail from a tracked company asking him to act (questionnaire, assessment,
+  // availability) is a job lead for that company that needs him, not an automated receipt.
+  const trackedNames = readApplications().map((a) => a.company).filter(Boolean);
+  for (const r of rows as Array<ThreadRow & { from?: string; subject?: string; company?: string | null; ask?: string | null }>) {
+    if ((kindOverrides as Record<string, unknown>)[r.id] || r.archived) continue;
+    const hit = atsActionAsk(r, trackedNames);
+    if (!hit) continue;
+    r.kind = "job_lead"; r.kindBy = "rules"; r.why = `asks for action, ${hit.company}`;
+    r.company = hit.company; r.ask = hit.ask; r.automated = false;
+  }
   for (const r of rows) {
     if ((kindOverrides as Record<string, unknown>)[r.id] || r.kind === "recruiter" || r.kind === "job_lead") continue;
     const from = String((r as ThreadRow & { from?: string }).from ?? "").toLowerCase();
@@ -161,11 +189,15 @@ export function readFollowupRows(root: string = careerOpsRoot(), threadRowList?:
 
 export type Opportunity = {
   key: string; title: string; company: string; line2: string; when: string | null; state: "overdue" | "today" | "scheduled" | "upcoming"; other: boolean;
-  rows: { n: string; company: string; role: string; status: string; url: string }[];
+  rows: { n: string; company: string; role: string; status: string; url: string; next?: string; updated?: string }[];
   people: { name: string; role: string }[];
   threads: { id: string; name: string; date: string; snippet: string; lastFromMe: boolean; href: string; linkedin: boolean; answeredVia: string | null }[];
   mark?: { mark: string; at: string; lastDate: string } | null;
+  call?: { label: string; day: string } | null; cadenceDue?: string | null;
 };
+
+/** An Inbox row: an opportunity in exactly one section, with its action and when text. */
+export type InboxItem = Opportunity & { section: "needs" | "waiting" | "done"; action: string; when: string; sort: string; scheduled?: { at: string; label: string; day: string } };
 
 /** data/hunt-contacts.json: email -> { name, role, company } for people behind threads. */
 export function readContacts(root: string = careerOpsRoot()): Record<string, { name: string; role: string; company: string }> {
@@ -173,13 +205,13 @@ export function readContacts(root: string = careerOpsRoot()): Record<string, { n
 }
 
 /** Follow-up opportunities (marks applied: Done / Ignore hide them, keyed "opp:<key>"). */
-export function readOpportunities(root: string = careerOpsRoot()): Opportunity[] {
+export function readOpportunities(root: string = careerOpsRoot(), { keepAll = false }: { keepAll?: boolean } = {}): Opportunity[] {
   let log = "";
   try { log = readApplicationStatusLog() ?? ""; } catch { /* dates fall back */ }
   const tracker = trackerRows(readApplications(), parseStatusLog(log), readHuntEnrichment(root).jobs);
   const { rows: threads } = readThreadRows(root);
   const { marks } = readMessageMarks(root);
-  const opps = buildOpportunities({ entries: readFollowupEntries(root), tracker, threads, contacts: readContacts(root) }) as Opportunity[];
+  const opps = buildOpportunities({ entries: readFollowupEntries(root), tracker, threads, contacts: readContacts(root), keepAll }) as Opportunity[];
   return opps.map((o) => {
     const m = (marks as Record<string, { mark: string; at: string; lastDate: string }>)[`opp:${o.key}`];
     const latest = o.threads[0]?.date ?? "";
@@ -187,4 +219,46 @@ export function readOpportunities(root: string = careerOpsRoot()): Opportunity[]
     const back = m?.mark === "done" && latest && m.lastDate && latest > m.lastDate && !o.threads[0]?.lastFromMe;
     return { ...o, mark: m && !back ? m : null };
   });
+}
+
+// ── hunt: Inbox (Messages + Follow-ups in one page) ──────────────────────
+
+const inboxCache = new Map<string, { at: number; value: { needs: InboxItem[]; waiting: InboxItem[]; done: InboxItem[] } }>();
+
+/**
+ * The Inbox's three sections for this profile. Cached for 20 s per data root, because the nav
+ * badge reads it on every page and the cadence calculator is a child process.
+ */
+export function readInbox(root: string = careerOpsRoot(), { fresh = false }: { fresh?: boolean } = {}): { needs: InboxItem[]; waiting: InboxItem[]; done: InboxItem[] } {
+  const hit = inboxCache.get(root);
+  if (!fresh && hit && Date.now() - hit.at < 20_000) return hit.value;
+  const value = inboxSections(readOpportunities(root, { keepAll: true })) as { needs: InboxItem[]; waiting: InboxItem[]; done: InboxItem[] };
+  inboxCache.set(root, { at: Date.now(), value });
+  return value;
+}
+
+/** The "Needs my reply" count for the nav badge, or 0 when anything fails. */
+export function readInboxNeedsCount(root: string = careerOpsRoot()): number {
+  try { return readInbox(root).needs.length; } catch { return 0; }
+}
+
+/** The profile's base pay floor from config/ranking.yml (base_floor), or null when unset. */
+export function readBaseFloor(root: string = careerOpsRoot()): number | null {
+  let text: string;
+  try { text = fs.readFileSync(path.join(root, "config", "ranking.yml"), "utf8"); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw e;
+  }
+  const cfg = (yaml.load(text) ?? {}) as { base_floor?: unknown };
+  const n = Number(cfg.base_floor);
+  return cfg.base_floor != null && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** The profile's Best overall rank settings (rank_weights, pay band, floor, location scores). */
+export function readRankSettings(root: string = careerOpsRoot()): ReturnType<typeof rankSettings> {
+  let text = "";
+  try { text = fs.readFileSync(path.join(root, "config", "ranking.yml"), "utf8"); } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
+  return rankSettings(text ? (yaml.load(text) ?? {}) : {});
 }

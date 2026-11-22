@@ -34,14 +34,32 @@ import { trackerEmptyPresentation, trackerEmptyState, type TrackerEmptyState } f
 import { trackerEmptyMessage } from "@/lib/tracker-empty.mjs";
 import { listEntrySync } from "@/lib/history-back.mjs";
 import { pipelineFindRolesHref } from "@/lib/scan-on-load.mjs";
+import { sortByPay } from "@/lib/hunt-rank-order.mjs"; // hunt: Pay column
 
 type Tab = (typeof PIPELINE_TABS)[number];
 type SavedView = NonNullable<ReturnType<typeof normalizeView>>;
 
-const SORT_KEYS = ["tracker", "company", "role", "score", "status", "date"] as const;
+// hunt: "rank" (the one Best overall #) replaces the tracker number as the first column; the
+// tracker number moves to a muted "ID" column at the far right, never with a "#".
+// hunt: "pay" (posted base, est. TC second line) sits right after Fit.
+const SORT_KEYS = ["rank", "company", "role", "score", "pay", "status", "date"] as const;
+type PayCell = { base: string | null; tc: string | null; sortUsd: number | null; title: string };
+const SORT_LABEL: Record<string, string> = { rank: "rank", score: "fit" };
 const VIEWS_KEY = "career-ops:pipeline-views";
 const REMOVAL_WARNING = "This removal is not saved yet. Reloading brings the view back.";
 type SortKey = (typeof SORT_KEYS)[number];
+
+/** hunt: rows by Best overall rank (#1 first when dir is ascending); unranked rows last. */
+function sortByRank(rows: Application[], ranks: Record<string, number>, dir: number): Application[] {
+  const r = (a: Application) => ranks[String(a.n)];
+  return [...rows].sort((a, b) => {
+    const x = r(a), y = r(b);
+    if (x == null && y == null) return Number.parseInt(String(b.n), 10) - Number.parseInt(String(a.n), 10);
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (x - y) * (dir === 1 ? -1 : 1);
+  });
+}
 
 export function PipelineView({
   applications,
@@ -50,6 +68,9 @@ export function PipelineView({
   inboxFitError = null,
   trackerShape = "rows",
   cvRows = [],
+  appRanks = {},
+  appPay = {},
+  rankCaption = null,
 }: {
   applications: Application[];
   inbox: InboxJob[] | null;
@@ -58,6 +79,12 @@ export function PipelineView({
   trackerShape?: "missing" | "empty" | "malformed" | "rows";
   /** Tracker row numbers that have a tailored CV PDF on disk. */
   cvRows?: string[];
+  /** hunt: tracker row number -> Best overall rank (#N). */
+  appRanks?: Record<string, number>;
+  /** hunt: tracker row number -> Pay cell (posted base, est. TC), absent when pay is unknown. */
+  appPay?: Record<string, PayCell>;
+  /** hunt: one line on how Best overall works, for this profile. */
+  rankCaption?: string | null;
 }) {
   const hasCv = useMemo(() => new Set(cvRows), [cvRows]);
   const params = useSearchParams();
@@ -101,7 +128,7 @@ export function PipelineView({
   const pMin = parseFloat(params.get("min") ?? "");
   const minFilter: number | null = Number.isFinite(pMin) ? pMin : null;
   const pSort = params.get("sort") ?? "";
-  const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "score";
+  const sortKey: SortKey = (SORT_KEYS as readonly string[]).includes(pSort) ? (pSort as SortKey) : "rank";
   const sortDir: 1 | -1 = params.get("dir") === "1" ? 1 : -1;
   const sort = { key: sortKey, dir: sortDir };
 
@@ -385,13 +412,17 @@ export function PipelineView({
     () =>
       // scoreNum is the real score parser (it handles the tracker's "4.2/5"
       // cells); sortRows takes it rather than keeping a second copy (#4333).
-      sortRows(
-        tabRows.filter(matchesFilters),
-        { key: sortKey, dir: sortDir },
-        scoreOf,
-        companyLabelOf,
-      ) as Application[],
-    [tabRows, matchesFilters, sortKey, sortDir, scoreOf, companyLabelOf],
+      sortKey === "rank"
+        ? sortByRank(tabRows.filter(matchesFilters), appRanks, sortDir)
+        : sortKey === "pay"
+        ? (sortByPay(tabRows.filter(matchesFilters), (r: Application) => appPay[String(r.n)], sortDir) as Application[])
+        : (sortRows(
+            tabRows.filter(matchesFilters),
+            { key: sortKey, dir: sortDir },
+            scoreOf,
+            companyLabelOf,
+          ) as Application[]),
+    [tabRows, matchesFilters, sortKey, sortDir, scoreOf, companyLabelOf, appRanks, appPay],
   );
 
   const filtering = query !== "" || minFilter != null;
@@ -954,7 +985,7 @@ export function PipelineView({
               {inboxFitError && (
                 <p role="alert" className="mt-2 whitespace-pre-wrap text-xs text-red-500">{inboxFitError}</p>
               )}
-              <InboxTriage inbox={inbox} />
+              <InboxTriage inbox={inbox} rankCaption={rankCaption} />
               {inbox.length === 0 && <InboxEmpty tracked={visibleApplications.length} />}
             </>
           )}
@@ -969,7 +1000,7 @@ export function PipelineView({
           <table
             aria-label="Tracked applications"
             aria-rowcount={filtered.length + 1}
-            className="w-full min-w-[44rem] text-sm min-[1440px]:table-fixed min-[1440px]:[&_th:nth-child(1)]:w-11 min-[1440px]:[&_th:nth-child(2)]:w-[4.5rem] min-[1440px]:[&_th:nth-child(3)]:w-[26%] min-[1440px]:[&_th:nth-child(4)]:w-[32%] min-[1440px]:[&_th:nth-child(5)]:w-[5.5rem] min-[1440px]:[&_th:nth-child(6)]:w-[14rem] min-[1440px]:[&_th:nth-child(7)]:w-[6.75rem] min-[1440px]:[&_th:nth-child(8)]:w-[4.75rem]"
+            className="w-full min-w-[44rem] text-sm min-[1440px]:table-fixed min-[1440px]:[&_th:nth-child(1)]:w-11 min-[1440px]:[&_th:nth-child(2)]:w-[4.5rem] min-[1440px]:[&_th:nth-child(3)]:w-[26%] min-[1440px]:[&_th:nth-child(4)]:w-[26%] min-[1440px]:[&_th:nth-child(5)]:w-[5.5rem] min-[1440px]:[&_th:nth-child(6)]:w-[7.5rem] min-[1440px]:[&_th:nth-child(7)]:w-[14rem] min-[1440px]:[&_th:nth-child(8)]:w-[6.75rem] min-[1440px]:[&_th:nth-child(9)]:w-[4.75rem]"
           >
             <thead className="bg-surface/60 text-left text-xs uppercase tracking-wide text-faint">
               <tr aria-rowindex={1}>
@@ -995,12 +1026,13 @@ export function PipelineView({
                       className="inline-flex cursor-pointer select-none items-center gap-1 uppercase tracking-wide hover:text-foreground"
                       onClick={() => setParams({ sort: k, dir: sort.key === k ? sort.dir * -1 : -1 })}
                     >
-                      {k}
+                      {SORT_LABEL[k] ?? k}
                       <ChevronsUpDown aria-hidden="true" className="size-3" />
                     </button>
                   </th>
                 ))}
                 <th className="whitespace-nowrap px-4 py-2.5 font-medium">resume</th>
+                <th className="whitespace-nowrap px-4 py-2.5 font-medium normal-case text-faint">ID</th>
               </tr>
             </thead>
             {/* Keep editors mounted while query navigation is pending: sorting
@@ -1030,6 +1062,8 @@ export function PipelineView({
                     onHeldSave={onHeldSave}
                     onOpen={followDetail}
                     onArm={stampDetail}
+                    rank={appRanks[String(r.n)] ?? null}
+                    pay={appPay[String(r.n)] ?? null}
                   />
                 );
               })}
@@ -1089,8 +1123,14 @@ const TrackerRow = memo(function TrackerRow({
   onHeldSave,
   onOpen,
   onArm,
+  rank = null,
+  pay = null,
 }: {
   r: Application;
+  /** hunt: the Pay cell, or null when no pay is known for this row. */
+  pay?: PayCell | null;
+  /** hunt: Best overall rank, or null when the row's job is not ranked. */
+  rank?: number | null;
   rowIndex: number;
   selected: boolean;
   isCursor: boolean;
@@ -1118,7 +1158,7 @@ const TrackerRow = memo(function TrackerRow({
       <td className="w-8 px-3 py-3">
         <input
           type="checkbox"
-          aria-label={`Select ${company.label}, ${r.role} (#${r.n})`}
+          aria-label={`Select ${company.label}, ${r.role} (ID ${r.n})`}
           className="tap-44"
           checked={selected}
           onChange={(event) => {
@@ -1129,7 +1169,7 @@ const TrackerRow = memo(function TrackerRow({
       </td>
       <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums">
         <Link href={detailHref} tabIndex={-1} onPointerDown={arm} onClick={open} className="transition-colors group-hover:text-brand-text">
-          #{r.n}
+          {rank != null ? `#${rank}` : <span className="text-faint">—</span>}
         </Link>
       </td>
       <td className="px-4 py-3 font-medium">
@@ -1162,6 +1202,10 @@ const TrackerRow = memo(function TrackerRow({
       <td className="px-4 py-3">
         <Badge tone={scoreTone(r.score)}>{r.score || "—"}</Badge>
       </td>
+      <td className="whitespace-nowrap px-4 py-3 tabular-nums" data-pay-cell title={pay?.title ?? "Pay not listed"}>
+        {pay?.base && pay.base !== "—" ? <span className="block text-foreground">{pay.base}</span> : !pay?.tc ? <span className="text-faint">—</span> : null}
+        {pay?.tc && <span className={cn("block text-xs text-faint", pay.base && pay.base !== "—" && "max-sm:hidden")} data-pay-tc>{pay.tc}</span>}
+      </td>
       <td className="whitespace-nowrap px-4 py-3 text-muted">
         <span className="row-above inline-block">
         <StatusSelect
@@ -1191,6 +1235,7 @@ const TrackerRow = memo(function TrackerRow({
           <span className="text-faint">—</span>
         )}
       </td>
+      <td className="whitespace-nowrap px-4 py-3 text-xs tabular-nums text-faint">ID {r.n}</td>
     </tr>
   );
 });

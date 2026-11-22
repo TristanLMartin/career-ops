@@ -31,6 +31,9 @@ target:
   levels: [senior, dual]          # level keys from the ladder below (null = any level)
   location_tiers: [1, 2, 5]
   always_companies: []            # companies that pass the location check anyway
+  stretch_levels: [staff, staffplus, stretch]   # pass as a stretch when an evaluation says you meet the level
+  exclude_titles: ["re:IT", "help ?desk", "desktop support", "re:pre-?sales", "account team", "re:data scientists?", firmware, "hardware engineer", "re:early[- ]career"]
+  # relocate: { tiers: [3], tc_min: 300000, base_top_min: 250000 }   # a secondary metro only for really good pay
 
 # Built-in IC ladder (no level.rules): Senior/Sr or no level = senior; I/II or plain
 # "Software Engineer" at a big company = mid; "Senior / Staff" = dual; Staff at a company not in
@@ -38,8 +41,11 @@ target:
 level:
   factors: { senior: 1.0, mid: 0.85, dual: 0.7, stretch: 0.7, staff: 0.45, staffplus: 0.25 }
   big_companies: [Google, Meta, Amazon, Microsoft, Apple, Stripe, Databricks, Snowflake, Airbnb, Uber]
+  # Companies that never put levels in titles: a plain "Software Engineer" there reads as Senior, not Mid.
+  no_title_levels: []             # e.g. [Anthropic, OpenAI, Stripe]
 
 auto_score_per_day: 0      # unscored on-target roles evaluated per day by the LLM (0 = no spend)
+# auto_score_model: claude-sonnet-5-5   # model for those daily lite evaluations (default: profile.yml spend_tier)
 top_picks: { min_fit: 3.8, min_level: 0.7, per_company: 3, limit: 10 }
 shortlist: { min_relevance: 55 }
 

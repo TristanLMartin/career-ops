@@ -144,7 +144,8 @@ export async function discover({ root = getCareerOpsRoot(), fetchHn = true, fetc
       if (!known.has(k)) known.set(k, { ...b, name: c[h.indexOf("company")] || b.slug, source: "manual", firstSeen: now.toISOString().slice(0, 10) });
     }
   }
-  const boards = [...known.values()].filter((b) => !watched.has(`${b.provider}:${b.slug}`) && !names.has(String(b.name).toLowerCase()));
+  const cut = cutNames(root);
+  const boards = [...known.values()].filter((b) => !watched.has(`${b.provider}:${b.slug}`) && !names.has(String(b.name).toLowerCase()) && !cut.has(cutKey(b.name)));
   state.boards = boards;
   state.updatedAt = now.toISOString();
   fs.writeFileSync(stateFile, JSON.stringify(state, null, 1));
@@ -154,6 +155,17 @@ export async function discover({ root = getCareerOpsRoot(), fetchHn = true, fetc
   fs.writeFileSync(path.join(root, "data", "discovery-boards.yml"), yamlDump({ ...filters, tracked_companies: boards.map(entry) }));
   fs.writeFileSync(path.join(root, "data", "discovery-hn.yml"), yamlDump({ ...filters, tracked_companies: [{ name: "Hacker News Who is hiring", provider: "hackernews", enabled: true }] }));
   return { boards: boards.length, threads: state.threads };
+}
+
+// hunt: config/portal-cuts.yml `cut` — company names left out of the discovery lists.
+export const cutKey = (name) => String(name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+export function cutNames(root) {
+  try {
+    const doc = loadYaml(readText(path.join(root, "config", "hunt-portal-cuts.yml"))) ?? {};
+    return new Set((Array.isArray(doc.cut) ? doc.cut : []).map(cutKey).filter(Boolean));
+  } catch {
+    return new Set();
+  }
 }
 
 export function runDiscoveryScan(root, which) {

@@ -1,7 +1,9 @@
-// Ranking badges for an inbox row.
-// Shows composite, pay, location tier, relevance, fit and benefit count.
+// hunt: a Jobs card shows only "#N" (Best overall), one meta line (fit, pay, place, age) and at
+// most one warning chip (RankBadges). Everything else (relevance, the composite score, the
+// head-to-head, benefits, level) lives on the job page under "Why this rank" (WhyThisRank).
 import { Badge } from "@/components/ui/badge";
 import { BENEFIT_LABELS, LOCATION_TIER_LABEL, formatPayWithTc, type HuntBenefits, type HuntEnrichment } from "@/lib/hunt-types";
+import { fitLabel, placeLabel, ratingLabel, shortPay, stretchLabel, warningChip } from "@/lib/hunt-rank-order.mjs";
 
 function tone(v: number | null | undefined): "good" | "warn" | "bad" | "muted" {
   if (v == null) return "muted";
@@ -29,7 +31,39 @@ function lcaNote(e: HuntEnrichment): string {
   return ` DOL H-1B filings: senior base median ${k(l.base)} (${l.where}, n=${l.n}${l.basis.startsWith("generic") ? ", generic titles p75" : ""})${est}.`;
 }
 
+/** Card line 2: "Fit 4.2/5 · $172–280k base · ~$570k TC est. · Remote US · 3d ago". */
+export function CardMeta({ e, age }: { e: HuntEnrichment; age?: string | null }) {
+  const parts = [ratingLabel(e), fitLabel(e), shortPay(e), placeLabel(e), age ?? null].filter(Boolean) as string[];
+  const more = e.moreAt;
+  return (
+    <>
+      <span className="min-w-0 truncate" data-card-meta>{parts.join(" · ")}</span>
+      {more ? <span className="shrink-0 whitespace-nowrap text-muted" data-more-at title={`Best overall shows at most 2 jobs per company in its top 20; ${more} more ${e.company} job${more === 1 ? "" : "s"} follow below`}>+{more} more at {e.company}</span> : null}
+    </>
+  );
+}
+
+/** The "Stretch" badge for a Staff+ job (job page header), or nothing. */
+export function StretchBadge({ e }: { e: HuntEnrichment | null | undefined }) {
+  const s = e ? stretchLabel(e) : null;
+  return s ? <Badge tone="info" title={s.title} data-stretch>{s.label}</Badge> : null;
+}
+
+/** "Stretch" on a Staff+ job, then the one warning chip worth a glance (layoffs, unverified employer, below floor). */
 export function RankBadges({ e }: { e: HuntEnrichment | null | undefined }) {
+  const chip = e ? warningChip(e) : null;
+  const stretch = e ? stretchLabel(e) : null;
+  if (!chip && !stretch) return null;
+  return (
+    <>
+      {stretch && <StretchBadge e={e} />}
+      {chip && <Badge tone="warn" title={chip.title}>{chip.label}</Badge>}
+    </>
+  );
+}
+
+/** Every ranking signal, for the job page's "Why this rank" and the Add-a-job result. */
+export function RankDetails({ e }: { e: HuntEnrichment | null | undefined }) {
   if (!e) return null;
   const pay = formatPayWithTc(e.pay, e.tc_est);
   const benefits = e.benefits ? (Object.entries(e.benefits) as [keyof HuntBenefits, boolean][]).filter(([, v]) => v).map(([k]) => BENEFIT_LABELS[k]) : [];
@@ -39,16 +73,16 @@ export function RankBadges({ e }: { e: HuntEnrichment | null | undefined }) {
       {e.origin === "discovery" && <Badge tone="info" title={`Found outside your watchlist${e.channel ? ` via ${channelLabel(e.channel)}` : ""}`}>{e.channel ? `Discovery · ${channelLabel(e.channel)}` : "Discovery"}</Badge>}
       {e.origin === "manual" && <Badge tone="info" title="You added this one">Added by you</Badge>}
       {e.h2h_rank != null && (
-        <Badge tone={e.h2h_rank <= 20 ? "good" : "info"} title={e.h2hVia === "group" ? "Head-to-head rank of a similar role at this company (Sonnet tournament, Borda count)" : `Sonnet head-to-head tournament rank (3 shuffled rounds, Borda count)${e.h2hWhy ? `: ${e.h2hWhy}` : ""}`}>
-          Head-to-head #{e.h2h_rank}{e.h2hVia === "group" ? " (group)" : ""}
+        <Badge tone="muted" title={e.h2hVia === "group" ? "Head-to-head place of a similar role at this company" : `Sonnet head-to-head place (only breaks near-ties in Best overall)${e.h2hWhy ? `: ${e.h2hWhy}` : ""}`}>
+          Head-to-head place {e.h2h_rank}{e.h2hVia === "group" ? " (group)" : ""}
         </Badge>
       )}
       {e.caution && <Badge tone="warn" title="Caution: recent layoffs at this company (research list)">Caution: layoffs</Badge>}
-      {e.belowFloor && <Badge tone="bad" title={`Posted base tops out below your ${floorText(e.floor)} floor (config/ranking.yml base_floor). Pay scores 0 and it stays off the Shortlist.`}>Below {floorText(e.floor)} floor</Badge>}
+      {e.belowFloor && <Badge tone="bad" title="Posted base tops out below your floor. It sinks in Best overall and stays off the Shortlist.">Below pay floor</Badge>}
       {e.identityUnverified && <Badge tone="warn" title="Company identity not verified: confirm who the employer is before applying">Company unverified</Badge>}
       {e.composite != null && (
-        <Badge tone={tone(e.composite)} title="Composite rank score (config/ranking.yml)">
-          Rank {Math.round(e.composite)}
+        <Badge tone={tone(e.composite)} title="Composite score 0-100 (config/ranking.yml weights). Not the # rank.">
+          Composite {Math.round(e.composite)}/100
         </Badge>
       )}
       {pay && (
@@ -88,5 +122,34 @@ export function RankBadges({ e }: { e: HuntEnrichment | null | undefined }) {
         </Badge>
       )}
     </span>
+  );
+}
+
+/**
+ * "Why this rank": where the job sits in Best overall and why (the head-to-head place and its
+ * deciding reason, or the score fallback), then every other signal. Collapsed; on the job page.
+ */
+export function WhyThisRank({ e, rank }: { e: HuntEnrichment; rank: number | null }) {
+  const inTournament = e.h2h_rank != null && e.h2hVia !== "group";
+  return (
+    <details className="group rounded-xl border border-border" data-testid="why-this-rank">
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 px-4 text-sm text-muted hover:text-foreground">
+        <span className="transition-transform group-open:rotate-90" aria-hidden>›</span>
+        Why this rank{rank != null ? ` (#${rank})` : ""}
+      </summary>
+      <div className="space-y-3 border-t border-border px-4 py-3 text-sm">
+        <ul className="space-y-1">
+          {inTournament ? (
+            <li>Head-to-head place {e.h2h_rank}: Sonnet compared it with other evaluated jobs on offer chance at the level, pay, experience match and location.{e.h2hWhy ? <span className="text-muted"> Deciding reason: {e.h2hWhy}</span> : null}</li>
+          ) : (
+            <li>Not in the head-to-head yet{typeof e.fit === "number" ? " (it joins at the next head-to-head run or insert)" : " (no full evaluation)"}, so it sits below those jobs, ordered by {typeof e.fit === "number" ? "evaluation, then" : ""} composite score{e.composite != null ? ` ${Math.round(e.composite)}/100` : ""}.</li>
+          )}
+          <li className="text-muted">{[fitLabel(e), shortPay(e), placeLabel(e)].filter(Boolean).join(" · ")}</li>
+          {stretchLabel(e) && <li data-stretch><span className="font-medium">Stretch:</span> <span className="text-muted">{stretchLabel(e)!.title}</span></li>}
+        </ul>
+        <RankDetails e={e} />
+        {e.quick_why && <p className="text-xs text-muted">Quick score: {e.quick_why}</p>}
+      </div>
+    </details>
   );
 }

@@ -8,7 +8,8 @@
 #   scripts/hunt-cron.sh wide-weekly # weekly: recruiter-named company boards + funding-news (GeekWire/TechCrunch) boards
 #   scripts/hunt-cron.sh targets   # daily: named target companies (ATS boards + big-tech careers APIs), then their JDs
 #   scripts/hunt-cron.sh h2h       # weekly: Sonnet head-to-head of the top 100 groups (Borda) -> data/hunt-h2h.json
-#   scripts/hunt-cron.sh autoscore # score the day's top unscored roles (auto_score_per_day, Haiku; Sonnet retry)
+#   scripts/hunt-cron.sh autoscore # score the day's top unscored roles (auto_score_per_day, Haiku; Sonnet retry),
+#                                     # then re-check that the top 50 + every >180-day posting is still open (zero tokens)
 #   scripts/hunt-cron.sh comp-refresh # quarterly: DOL H-1B LCA senior base per company -> data/comp-lca-summary.json
 #   scripts/hunt-cron.sh ui        # start the web UI (CAREER_OPS_WEB_PORT, default 3000) if it isn't running
 #
@@ -95,6 +96,8 @@ case "${1:-}" in
     # Quick 1-5 Haiku score for every posting that has none yet (batched, ~$0.0007 a posting).
     node scripts/hunt-quickscore.mjs --yes >> "$LOG" 2>&1
     node scripts/hunt-enrich.mjs --no-fetch --quiet >> "$LOG" 2>&1
+    # Posting age never demotes a job; a closed one leaves Best overall (data/hunt-liveness.json).
+    node scripts/hunt-liveness.mjs >> "$LOG" 2>&1
     echo "$(stamp) autoscore: done" >> "$LOG"
     ;;
   comp-refresh)

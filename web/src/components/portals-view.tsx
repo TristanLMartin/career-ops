@@ -9,6 +9,23 @@ import { cn } from "@/lib/cn";
 import type { WatchedCompany } from "@/lib/portals-config.mjs";
 import { showPortalsSetup } from "@/lib/portals-setup.mjs";
 
+// hunt: built server-side by readPortalSources (lib/hunt-portals-sources.mjs, which reads files).
+type SourcedCompany = { name: string; enabled: boolean; host: string; sources: string[]; boards?: string[] };
+type Links = Record<string, { href: string; count: number }>;
+
+/** hunt: a company name that opens Jobs filtered to it, with its open-job count. */
+function CompanyName({ name, links, className }: { name: string; links?: Links; className?: string }) {
+  const l = links?.[name.trim().toLowerCase()];
+  if (!l) return <span className={cn("text-sm font-medium", className)}>{name}</span>;
+  return (
+    <Link href={l.href} className={cn("inline-flex min-w-0 items-baseline gap-1.5 text-sm font-medium hover:text-brand-text hover:underline max-sm:min-h-[36px] max-sm:items-center", className)} title={`Show ${name}'s jobs in Jobs`} data-company-link>
+      <span className="truncate">{name}</span>
+      <span className="shrink-0 text-[11px] font-normal tabular-nums text-faint">{l.count} job{l.count === 1 ? "" : "s"}</span>
+    </Link>
+  );
+}
+type Sourced = { companies: SourcedCompany[]; totals: Record<string, number>; vcBoards: number; total: number; labels: { key: string; label: string }[] };
+
 type Company = { name: string; status: string; detail: string };
 type Result = { available: boolean; configured: boolean; companies: Company[]; error?: string };
 
@@ -24,10 +41,14 @@ export function PortalsView({
   watched,
   missing = false,
   target = "portals.yml",
+  sourced = null,
+  links,
 }: {
   watched: WatchedCompany[];
   missing?: boolean;
   target?: string;
+  sourced?: Sourced | null;
+  links?: Links;
 }) {
   const [res, setRes] = useState<Result | null>(null);
   const [loading, setLoading] = useState(false);
@@ -72,7 +93,8 @@ export function PortalsView({
         {loading && <span className="text-xs text-faint">Probing each company&apos;s ATS… (~30–60s)</span>}
       </div>
 
-      {!res && watched.length > 0 && <WatchedList watched={watched} />}
+      {!res && sourced && <SourcedList sourced={sourced} links={links} />}
+      {!res && !sourced && watched.length > 0 && <WatchedList watched={watched} links={links} />}
 
       {res && !res.available && !res.error && (
         <p className="mt-4 rounded-xl border border-dashed border-border bg-surface/30 p-4 text-sm text-muted">
@@ -122,7 +144,7 @@ export function PortalsView({
                 <li key={c.name} className="flex items-center gap-3 px-4 py-2.5">
                   <CompanyLogo name={c.name} size={20} />
                   <span className={cn("size-1.5 shrink-0 rounded-full", t.dot)} />
-                  <span className="shrink-0 text-sm font-medium">{c.name}</span>
+                  <CompanyName name={c.name} links={links} className="shrink-0" />
                   <span className="truncate font-mono text-xs text-faint">{c.detail}</span>
                   <div className="ml-auto flex shrink-0 items-center gap-2">
                     {c.status === "broken" && <FixAffordance company={c.name} job={fixByCompany.get(c.name)} onFix={() => startJob({ title: `Fix · ${c.name}`, subtitle: "repair portal slug", kind: "fix-portal", input: c.name, page: "/portals" })} />}
@@ -162,7 +184,7 @@ function FixAffordance({ company, job, onFix }: { company: string; job?: Job; on
   );
 }
 
-function WatchedList({ watched }: { watched: WatchedCompany[] }) {
+function WatchedList({ watched, links }: { watched: WatchedCompany[]; links?: Links }) {
   const scanned = watched.filter((c) => c.enabled).length;
   return (
     <div className="mt-5">
@@ -175,13 +197,70 @@ function WatchedList({ watched }: { watched: WatchedCompany[] }) {
         {watched.map((c, i) => (
           <li key={`${i}-${c.name}`} className={cn("flex items-center gap-3 px-4 py-2.5", !c.enabled && "opacity-60")}>
             <CompanyLogo name={c.name} size={20} />
-            <span className="shrink-0 text-sm font-medium">{c.name}</span>
+            <CompanyName name={c.name} links={links} className="shrink-0" />
             <span className="truncate font-mono text-xs text-faint">{c.host}</span>
             {!c.enabled && (
               <span className="ml-auto shrink-0 rounded bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-muted">
                 paused
               </span>
             )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** hunt: every monitored company (portals.yml + discovery lists), each with its source(s). */
+function SourcedList({ sourced, links }: { sourced: Sourced; links?: Links }) {
+  const [filter, setFilter] = useState<string | null>(null);
+  const shown = filter ? sourced.companies.filter((c) => c.sources.includes(filter)) : sourced.companies;
+  const labelOf = Object.fromEntries(sourced.labels.map((s) => [s.key, s.label]));
+  return (
+    <div className="mt-5">
+      <p className="text-sm text-muted">
+        <span className="tabular-nums font-medium text-foreground">{sourced.total}</span> companies monitored
+        {sourced.vcBoards > 0 && (
+          <>
+            {" "}· plus <span className="tabular-nums">{sourced.vcBoards}</span> VC job boards
+          </>
+        )}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <button
+          onClick={() => setFilter(null)}
+          className={cn("rounded-full border px-2.5 py-1 text-xs max-sm:min-h-[36px]", !filter ? "border-brand/50 bg-brand/10 text-brand-text" : "border-border text-muted")}
+        >
+          All {sourced.total}
+        </button>
+        {sourced.labels.map((s) => (
+          <button
+            key={s.key}
+            onClick={() => setFilter(filter === s.key ? null : s.key)}
+            className={cn("rounded-full border px-2.5 py-1 text-xs max-sm:min-h-[36px]", filter === s.key ? "border-brand/50 bg-brand/10 text-brand-text" : "border-border text-muted")}
+          >
+            {s.label} <span className="tabular-nums">{sourced.totals[s.key]}</span>
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-faint">
+        Also searched without a company list: HN Who&apos;s Hiring, Dice, Indeed, Built In, YC, VC boards and funding news.
+        The health check above probes the Watchlist (portals.yml) only.
+      </p>
+      <ul className="mt-4 divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface/40">
+        {shown.map((c) => (
+          <li key={c.name} className={cn("flex items-center gap-3 px-4 py-2.5", !c.enabled && "opacity-60")}>
+            <CompanyLogo name={c.name} size={20} />
+            <CompanyName name={c.name} links={links} className="min-w-0" />
+            <span className="hidden truncate font-mono text-xs text-faint sm:inline">{c.host}</span>
+            <span className="ml-auto flex shrink-0 gap-1">
+              {c.sources.map((s) => (
+                <span key={s} className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-muted">
+                  {labelOf[s] ?? s}
+                </span>
+              ))}
+              {!c.enabled && <span className="rounded bg-surface-hover px-1.5 py-0.5 text-[10px] font-semibold text-muted">paused</span>}
+            </span>
           </li>
         ))}
       </ul>

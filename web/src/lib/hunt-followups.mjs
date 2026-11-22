@@ -50,10 +50,13 @@ export function scheduledCall(row, now = Date.now()) {
 }
 
 /**
- * @param {{ entries: any[], tracker: any[], threads: any[], contacts?: Record<string, {name: string, role: string, company: string}>, now?: number, waitDays?: number }} input
+ * @param {{ entries: any[], tracker: any[], threads: any[], contacts?: Record<string, {name: string, role: string, company: string}>, now?: number, waitDays?: number, keepAll?: boolean }} input
  *   entries: followup-cadence entries; tracker: trackerRows(); threads: threadRows() (with `from`).
+ *   keepAll (the Inbox): keep every opportunity that has a thread or a next step too, and keep
+ *   archived (individually marked) threads attached so the Inbox can file them under "Done or
+ *   ignored". Without it, the Follow-ups behavior is unchanged.
  */
-export function buildOpportunities({ entries = [], tracker = [], threads = [], contacts = {}, now = Date.now(), waitDays = 5 } = {}) {
+export function buildOpportunities({ entries = [], tracker = [], threads = [], contacts = {}, now = Date.now(), waitDays = 5, keepAll = false } = {}) {
   const today = localDay(now);
   const rowsByN = new Map(tracker.map((r) => [String(r.n), r]));
   const cadence = new Map(entries.map((e) => [String(e.num), e]));
@@ -65,7 +68,7 @@ export function buildOpportunities({ entries = [], tracker = [], threads = [], c
   // 1. people: merge threads of the same person (normalized name / address local part)
   const people = new Map();
   for (const t of threads) {
-    if (t.archived) continue;
+    if (t.archived && !keepAll) continue;
     const c = contacts[String(t.from ?? "").toLowerCase()];
     const key = normName(c?.name ?? t.name) || normName(t.from);
     if (!key) continue;
@@ -122,8 +125,18 @@ export function buildOpportunities({ entries = [], tracker = [], threads = [], c
       loose.push(p);
     }
   }
+  // keepAll (the Inbox): people with no tracker row at the same company are one opportunity
+  // ("Whatnot Hiring Team" and the Whatnot interviewer).
+  const byCo = new Map();
   for (const p of loose) {
+    const co = keepAll ? normCo(p.company || p.threads.find((t) => t.company)?.company || "") : "";
+    if (co.length >= 3 && byCo.has(co)) {
+      const o = byCo.get(co);
+      o.people.push(p); o.threads.push(...p.threads);
+      continue;
+    }
     const o = ensure(`p${p.key}`, { title: p.company || p.name, company: p.company || "" });
+    if (co.length >= 3) byCo.set(co, o);
     o.people.push(p); o.threads.push(...p.threads);
   }
 
@@ -156,13 +169,14 @@ export function buildOpportunities({ entries = [], tracker = [], threads = [], c
     // only rows that need a follow-up: tracker rows the cadence names or that carry threads,
     // scheduled calls, or threads waiting / owed
     const relevant = o.rows.some((r) => cadence.has(String(r.n))) || o.threads.some((t) => t.lastFromMe || t.owe) || !!call;
-    if (!relevant) continue;
+    if (!relevant && !(keepAll && (o.threads.length > 0 || o.rows.some((r) => r.next)))) continue;
     out.push({
       key: o.key, title: o.title, company: o.company, line2, when, state, other,
-      rows: o.rows.map((r) => ({ n: String(r.n), company: r.company, role: r.role, status: r.status, url: r.url ?? "" })),
+      call, cadenceDue: due,
+      rows: o.rows.map((r) => ({ n: String(r.n), company: r.company, role: r.role, status: r.status, url: r.url ?? "", next: r.next ?? "", updated: r.updated ?? "" })),
       // automated senders (donotreply, ATS receipts) keep their messages but are not people
       people: o.people.filter((p) => p.threads.some((t) => !t.automated) && !/^(do-?not-?reply|no-?reply|notifications?)$/i.test(p.name)).map((p) => ({ name: p.name, role: p.role })),
-      threads: o.threads.map((t) => ({ id: t.id, name: contacts[String(t.from ?? "").toLowerCase()]?.name ?? t.name, date: t.date, snippet: t.snippet, lastFromMe: t.lastFromMe, href: t.href, linkedin: /linkedin\.com/.test(t.href ?? "") || t.about === "LinkedIn", answeredVia: t.answeredVia ?? null })),
+      threads: o.threads.map((t) => ({ id: t.id, name: contacts[String(t.from ?? "").toLowerCase()]?.name ?? t.name, date: t.date, snippet: t.snippet, lastFromMe: t.lastFromMe, href: t.href, linkedin: /linkedin\.com/.test(t.href ?? "") || t.about === "LinkedIn", answeredVia: t.answeredVia ?? null, kind: t.kind, automated: !!t.automated, meeting: !!t.meeting, subject: t.subject ?? "", archived: !!t.archived, owe: !!t.owe, ask: t.ask ?? null })),
     });
   }
   const rank = { overdue: 0, today: 1, scheduled: 2, upcoming: 3 };
