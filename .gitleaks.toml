@@ -1,0 +1,19 @@
+# gitleaks config for scripts/secret-scan.sh: the default rules, minus a short list of files whose
+# findings are known and harmless (upstream test fixtures, public client keys of public job-board
+# APIs, translated docs that trip the LinkedIn rules, and fake keys in our own tests).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "known false positives (reviewed)"
+paths = [
+  '''(^|/)modes/nb/README\.md$''',
+  '''(^|/)modes/nl/_shared\.md$''',
+  '''(^|/)liveness-api\.mjs$''',
+  '''(^|/)providers/vdab\.mjs$''',
+  '''(^|/)tests/providers/(techinasia|vdab|wttj)\.test\.mjs$''',
+  '''(^|/)tests/plugins/h1b-sponsor\.test\.mjs$''',
+  '''(^|/)test-all\.mjs$''',
+  '''(^|/)web/tests/lib/report-scrub\.test\.mjs$''',
+  '''(^|/)tests/[a-z]+-messages-sync\.test\.mjs$''',
+]

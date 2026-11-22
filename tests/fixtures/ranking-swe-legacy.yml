@@ -1,0 +1,28 @@
+# Test fixture: the SWE ranking rules the hunt-* tests were written against (a fictional
+# Seattle-based backend engineer). Not a preset; presets live in presets/.
+target:
+  levels: [senior, dual]
+  location_tiers: [1, 2, 5]
+  always_companies: [DRW, Optiver, Hudson River Trading, Jump Trading, Tower Research Capital, IMC, Five Rings, Jane Street, Citadel, Citadel Securities, Two Sigma]
+  exclude_titles: ["IT Systems", "IT Support", "help desk", "helpdesk", "desktop support"]
+level:
+  big_companies: [Anthropic, OpenAI, Stripe, Databricks, Snowflake, Coinbase, Airbnb, DoorDash, Reddit, Cloudflare, Datadog, MongoDB]
+profile_rules:
+  location:
+    home: ["re:seattle|bellevue|redmond|kirkland|renton|tukwila|everett|tacoma|bothell|kent|issaquah|lynnwood", "re:WA", "re:US-WA-", "washington state"]
+    secondary: ["new york", "re:nyc", chicago]
+  level:
+    stretch_words: ["re:payments?|fraud|risk|checkout|billing|money movement|real[- ]time|calling|voice|video|messaging|chat infra(structure)?"]
+  relevance:
+    title_family: ["re:forward[- ]deployed|fde|deployment engineer|solutions? engineer|solutions? architect|back[- ]?end|full[- ]?stack|platform|infrastructure|payments?|applied ai|ai engineer|distributed systems|product engineer|software engineer|software developer"]
+    title_strong: ["re:forward[- ]deployed|fde|solutions? engineer|deployment engineer|payments?|fraud|risk|billing|checkout|money|real[- ]?time|messaging|calling|back[- ]?end|full[- ]?stack|applied ai|ai platform|platform|observability|logging|telemetry|data platform|developer (tools|productivity|experience|platform)|dev tools|infrastructure|trust (&|and) safety|integrity|privacy"]
+    title_off: ["re:front[- ]?end|design system|ios|android|mobile|react native|data scien\\w*|research|model training|ml engineer|machine learning engineer|security(?! clearance)|site reliability|sre|hardware|embedded|firmware|it systems|client platform|endpoint|desktop|legal|recruit\\w*|sales|marketing"]
+    domains:
+      payments: { weight: 12, words: ["re:payments?|checkout|billing|fraud|risk|money movement|transactions?|tax(es)?|stripe|ledger|invoic\\w*|card(s)? (issuing|processing)|chargebacks?|recaptcha|bnpl|lending"] }
+      realtime: { weight: 12, words: ["re:real[- ]?time|calling|calls|voice|video|webrtc|messaging|messenger|chat|low[- ]latency|e2ee|end[- ]to[- ]end encrypt\\w*|presence|rooms"] }
+      ai_tooling: { weight: 10, words: ["re:llms?|mcp|model context protocol|claude|agents?|agentic|applied ai|genai|generative ai|developer (tools|productivity|experience)|internal tool\\w*|copilot"] }
+      platform: { weight: 8, words: ["re:back[- ]?end|platform|infrastructure|distributed systems?|apis?|microservices?|databases?|mysql|storage|scal(e|ability|able)|reliability|graphql"] }
+      observability: { weight: 10, words: ["re:observability|logging|logs|log pipelines?|telemetry|metrics|tracing|monitoring|analytics|instrumentation|data platform|data pipelines?|event pipelines?|etl|data warehouse|dev(eloper)? tool(s|ing)|build (systems?|tools?)|ci\\/cd|internal platform"] }
+      growth: { weight: 4, words: ["re:growth|experiment\\w*|a\\/b|marketplace|monetization"] }
+      fullstack: { weight: 5, words: ["re:full[- ]?stack|react|typescript|front[- ]?end and back[- ]?end"] }
+    languages: [hack, php, go, golang, python, typescript, javascript, react, graphql, mysql, sql, terraform, docker, java]

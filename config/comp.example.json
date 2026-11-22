@@ -1,0 +1,19 @@
+[
+ {
+  "company": "Example Corp",
+  "level_equiv": "Senior",
+  "tc_median_usd": 250000,
+  "tc_range_usd": null,
+  "base_usd": 180000,
+  "stock_per_year_usd": 55000,
+  "bonus_usd": 15000,
+  "equity_type": "public RSU",
+  "location_basis": "US national (fictional example)",
+  "source_urls": ["https://example.com/your-source"],
+  "confidence": "medium",
+  "stage": "public",
+  "stability_note": "Fictional example row. Replace with your own research or delete.",
+  "company_tier": 2,
+  "as_of": "2026-01-01"
+ }
+]

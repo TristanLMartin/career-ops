@@ -1,0 +1,10 @@
+# Job boards and search filters (preset: generic). Full reference: templates/portals.example.yml.
+title_filter:
+  positive: []        # title keywords to keep, e.g. ["Registered Nurse", "RN"]
+  negative: ["Intern", "Internship"]
+location_filter:
+  always_allow: []    # e.g. ["Seattle", "Remote - US"]
+  allow: []
+  block: []
+max_posting_age_days: 45
+tracked_companies: [] # e.g. - { name: Providence, careers_url: "https://..." }

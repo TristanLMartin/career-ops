@@ -1,0 +1,64 @@
+# Wider discovery: startups and small companies beyond portals.yml.
+# Read by scripts/hunt-discover-wide.mjs (preset: generic). Every source here is public and login-free;
+# anything that answered with a login wall or a bot block when probed is listed under
+# `skipped` with the reason, and is never fetched.
+
+# Companies a recruiter told you about. Each is probed on Greenhouse / Lever / Ashby / Workable /
+# Breezy / Rippling by slug, and a slug is accepted only when that board's own API or
+# page names the company (or its domain). `slugs` are extra guesses to try first.
+recruiter_companies: []
+  # - { name: Example Co, domain: example.com, slugs: [exampleco] }
+
+# VC portfolio job boards, scanned daily through scan.mjs (career-ops' getro / a16z
+# speedrun / builtin providers) with the same title and location filters.
+vc_boards:
+  - { name: Madrona portfolio, provider: getro, careers_url: "https://jobs.madrona.com/jobs" }
+  - { name: Accel portfolio, provider: getro, careers_url: "https://jobs.accel.com/jobs" }
+  - { name: Index Ventures portfolio, provider: getro, careers_url: "https://indexventures.getro.com/jobs" }
+  - { name: a16z speedrun, provider: a16z-speedrun-talent }
+  - { name: General Catalyst portfolio, provider: getro, careers_url: "https://jobs.generalcatalyst.com/jobs" }
+  - { name: 8VC portfolio, provider: getro, careers_url: "https://jobs.8vc.com/jobs" }
+  - { name: Menlo Ventures portfolio, provider: getro, careers_url: "https://jobs.menlovc.com/jobs" }
+  - { name: Thrive Capital portfolio, provider: getro, careers_url: "https://jobs.thrivecap.com/jobs" }
+  - { name: Lightspeed portfolio, provider: consider, careers_url: "https://jobs.lsvp.com/jobs" }
+  - { name: Kleiner Perkins portfolio, provider: consider, careers_url: "https://jobs.kleinerperkins.com/jobs" }
+  - { name: Bessemer portfolio, provider: consider, careers_url: "https://jobs.bvp.com/jobs" }
+  - { name: GV portfolio, provider: consider, careers_url: "https://jobs.gv.com/jobs" }
+  - { name: Felicis portfolio, provider: consider, careers_url: "https://jobs.felicis.com/jobs" }
+  - { name: Battery Ventures portfolio, provider: consider, careers_url: "https://jobs.battery.com/jobs" }
+# Portfolio pages that are not Getro/Consider: the ATS boards they link are mined
+# (like HN) and scanned daily with the VC boards.
+portfolio_pages:
+  - { name: a16z portfolio, url: "https://jobs.a16z.com/jobs" }
+  - { name: Greylock portfolio, url: "https://jobs.greylock.com/jobs" }
+
+# Built In (public HTML; career-ops' builtin provider). Use your metro's host if Built In has
+# one (www.builtinchicago.org, www.builtinseattle.com, www.builtinnyc.com, ...) or builtin.com.
+builtin: []
+  # - { name: Built In <metro>, host: www.builtin<metro>.com, categories: [hr-recruiting], max_pages: 5 }
+
+# YC's public job listings (ycombinator.com/jobs, not Work at a Startup).
+yc_pages: []
+
+# Funding news (weekly): Series A-C rounds in these sectors over the last 90 days.
+funding_feeds:
+  - { name: geekwire, url: "https://www.geekwire.com/tag/funding/feed/", pages: 6 }
+  - { name: techcrunch, url: "https://techcrunch.com/category/venture/feed/", pages: 6 }
+funding_days: 90
+funding_sectors: []   # e.g. [health, climate]
+
+# Sources probed and found unusable with plain public requests (never fetched).
+skipped:
+  - { source: "Sequoia (jobs.sequoiacap.com)", reason: "Cloudflare challenge page" }
+  - { source: "Meta (metacareers.com)", reason: "HTTP 429 to plain requests; no public JSON API" }
+
+# Your own target companies: public ATS boards scanned daily with portals.yml's title/location
+# filters via `hunt-discover-wide.mjs targets` -> data/discovery-targets.yml.
+targets: []
+  # - { name: Example Co, careers_url: "https://job-boards.greenhouse.io/exampleco" }
+
+# Job-board searches through MCP connectors (scripts/hunt-discovery-boards.mjs, Dice / Indeed).
+# queries default to person.yml target_roles; locations to person.yml home, then "Remote".
+board_search:
+  queries: []          # e.g. ["registered nurse", "charge nurse"]
+  locations: []

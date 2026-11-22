@@ -1,0 +1,9 @@
+{
+  "_comment": "Optional alternative to CAREER_OPS_MCP_PROFILES in .env. Copy to config/profiles.json (gitignored). Paths are relative to this file.",
+  "codeRoot": "../..",
+  "defaultProfile": "me",
+  "profiles": {
+    "me": { "dataDir": "../..", "url": "http://127.0.0.1:3000", "enabled": true },
+    "partner": { "dataDir": "../../profiles/partner", "profileDir": "profiles/partner", "url": "http://127.0.0.1:3001", "enabled": false }
+  }
+}

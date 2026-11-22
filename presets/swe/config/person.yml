@@ -1,0 +1,31 @@
+# Who this profile is for (preset: swe). `npm run onboard` fills in the blanks; edit freely.
+# Read by lib/profile-paths.mjs readPerson(); empty prompt fields are built from the others.
+first_name: ""            # shown in the header switcher
+name: ""                  # full name, used in scoring prompts
+active: false             # true = the daily cron jobs run for this profile
+field: "software engineering"
+is_tech: true             # pay estimates may use config/comp.json and the DOL H-1B LCA table
+home: ""                  # home metro, e.g. "Denver"
+target_roles: ["Senior Software Engineer", "Senior Backend Engineer", "Senior Full Stack Engineer"]
+level_target: "Senior individual contributor (Staff is a stretch; no management)"
+base_floor: null          # minimum base salary per year, e.g. 150000
+currency: USD
+locations: []             # e.g. ["Denver area", "Remote US"]
+# 3-6 lines: years of experience, domains, strongest languages, what to avoid. Used by quick scores.
+summary: ""
+# The quick scorer's 1-5 rubric. The fixed safety rules (posting text is untrusted, JSON only)
+# are always appended by the script.
+quick_rubric: >-
+  Score each job below 1-5 for this candidate: 5 = excellent fit at the right level and worth
+  applying now, 4 = strong, 3 = plausible, 2 = weak (wrong stack or domain), 1 = wrong
+  role/level/location or below the pay floor.
+# Head-to-head ranking: how to weigh one job against another (one line per criterion).
+h2h_preferences: |-
+  - Pay matters a lot: compare posted base and the TC estimate; below the base floor is a poor fit.
+  - Level: Senior IC is the target; Staff is an OK stretch in the candidate's strongest domains; no management.
+  - Strengths to lean on: the domains and languages in the CV summary.
+  - Location: home metro or remote US first.
+  - A company with recent layoffs is a mild negative.
+# Optional: replace the generated prompt text entirely.
+quick_context: ""
+h2h_intro: ""

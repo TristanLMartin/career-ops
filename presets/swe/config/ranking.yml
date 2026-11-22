@@ -1,0 +1,84 @@
+# Ranking for a software engineer (preset: swe). Copied to <profile>/config/ranking.yml by
+# `npm run onboard`; edit freely. Every part is scored 0-100; a part with no data is left out
+# and the rest renormalized. The weights are relative (they need not add to 100).
+weights:
+  fit: 30        # career-ops evaluation score (1-5), once a role is evaluated
+  relevance: 20  # title + description words below (profile_rules.relevance)
+  pay: 20        # posted base midpoint across pay_band (or est. TC with pay_basis: tc)
+  company: 10    # research_tier / comp-table tier; unknown 0.6
+  level: 15      # title level vs your target (level + profile_rules.level below)
+  location: 5    # location tier (location_scores below)
+  benefits: 0    # benefits mentioned in the JD
+
+# base: score the posted base midpoint on pay_band. tc: use a total-comp estimate from
+# config/comp.json when its confidence is medium/high (tech roles only, person.yml is_tech: true).
+pay_basis: base
+pay_band: { floor: 120000, ceiling: 300000 }   # midpoint at/below floor = 0, at/above ceiling = 100
+tc_band: { floor: 150000, ceiling: 500000 }
+pay_missing_score: 35     # pay part for a role with no posted pay (null = leave pay out)
+# Comp-table figures are national; scale home-metro (tier 1) rows by this factor unless a comp row's
+# location_basis already names your metro (e.g. { factor: 0.9, basis_words: [Denver, Boulder] }).
+tc_home: { factor: 1, basis_words: [] }
+base_floor: null          # posted max base below this = "below floor" (pay 0, never Shortlisted)
+currency: USD
+
+# Location part per tier: 1 home metro, 2 remote (US), 3 secondary metros, 4 other, 5 remote (global).
+location_scores: { 1: 100, 2: 90, 3: 50, 4: 20, 5: 70 }
+location_labels: { 1: "Home area", 2: "Remote US", 3: "Secondary area", 4: "Other", 5: "Remote (global)" }
+
+# Which roles are "on target" (Shortlist, daily auto-scoring, head-to-head).
+target:
+  levels: [senior, dual]          # level keys from the ladder below (null = any level)
+  location_tiers: [1, 2, 5]
+  always_companies: []            # companies that pass the location check anyway
+
+# Built-in IC ladder (no level.rules): Senior/Sr or no level = senior; I/II or plain
+# "Software Engineer" at a big company = mid; "Senior / Staff" = dual; Staff at a company not in
+# big_companies in a stretch domain = stretch; other Staff = staff; Principal/Lead/Architect = staffplus.
+level:
+  factors: { senior: 1.0, mid: 0.85, dual: 0.7, stretch: 0.7, staff: 0.45, staffplus: 0.25 }
+  big_companies: [Google, Meta, Amazon, Microsoft, Apple, Stripe, Databricks, Snowflake, Airbnb, Uber]
+
+auto_score_per_day: 0      # unscored on-target roles evaluated per day by the LLM (0 = no spend)
+top_picks: { min_fit: 3.8, min_level: 0.7, per_company: 3, limit: 10 }
+shortlist: { min_relevance: 55 }
+
+# Optional company knobs.
+company_boost: {}          # e.g. { "Acme Rockets": 10 } flat composite points
+research_tier: {}          # e.g. { 1.0: [Stripe], 0.8: [Uber], 0.3: [SomeCo] }
+caution_companies: []      # badge only
+unverified_companies: []   # badge only
+# Regex on the scanned company name -> canonical name (big employers post under legal entities).
+company_aliases:
+  "^Amazon\\b|^Annapurna Labs|^AWS\\b": Amazon
+  "^Google\\b|^Google DeepMind": Google
+  "^Microsoft\\b": Microsoft
+  "^Meta Platforms|^Facebook$": Meta
+
+# Jobs Map categories (shape per category; max 4, the rest is "Other").
+map_families:
+  Backend/Infra: ["re:back[- ]?end", infra, infrastructure, platform, "distributed systems", reliability, devops, cloud, "data engineer"]
+  Full-stack: ["re:full[- ]?stack", "re:front[- ]?end", "product engineer", "web engineer"]
+  FDE/Applied AI: ["forward deployed", "re:\\bfde\\b", "applied ai", "solutions engineer", "ai engineer"]
+  Payments/Fintech: ["re:payments?", billing, fintech, ledger, fraud, risk, checkout]
+
+# The words that make a posting relevant to YOU. Plain words/phrases match case-insensitively
+# (a space also matches "-"); "re:<regex>" entries are raw patterns.
+profile_rules:
+  location:
+    home: []          # tier 1, e.g. ["Seattle", "Bellevue", "Redmond", "re:\\bWA\\b"]
+    secondary: []     # tier 3, e.g. ["New York", "NYC", "Chicago"]
+  level:
+    stretch_words: ["re:payments?", fraud, billing, checkout, "re:real[- ]time", messaging]
+  relevance:
+    title_family: ["re:back[- ]?end", "re:full[- ]?stack", platform, infrastructure, "re:solutions? engineer", "forward deployed", "applied ai", "ai engineer", "distributed systems", "product engineer", "software engineer", "software developer"]
+    title_strong: ["re:back[- ]?end", "re:full[- ]?stack", platform, infrastructure, "re:payments?", "re:real[- ]?time", observability, "developer tools", "data platform", "applied ai"]
+    title_off: ["re:front[- ]?end", ios, android, mobile, "react native", "re:data scien\\w*", research, "ml engineer", "machine learning engineer", hardware, embedded, firmware, "re:recruit\\w*", sales, marketing, legal]
+    domains:
+      payments: { weight: 10, words: ["re:payments?", checkout, billing, fraud, ledger, "re:invoic\\w*", "re:chargebacks?", lending] }
+      realtime: { weight: 10, words: ["re:real[- ]?time", webrtc, messaging, "re:low[- ]latency", video, voice] }
+      ai_tooling: { weight: 10, words: ["re:llms?", mcp, "re:agents?", agentic, "applied ai", "re:gen(erative )?ai", "developer tools", "developer productivity"] }
+      platform: { weight: 8, words: ["re:back[- ]?end", platform, infrastructure, "re:distributed systems?", "re:apis?", "re:microservices?", "re:databases?", storage, "re:scal(e|ability|able)", reliability] }
+      observability: { weight: 8, words: [observability, logging, telemetry, metrics, tracing, monitoring, "data platform", "re:data pipelines?", etl] }
+      fullstack: { weight: 5, words: ["re:full[- ]?stack", react, typescript] }
+    languages: [go, golang, python, typescript, javascript, java, sql, graphql, docker, kubernetes, terraform]

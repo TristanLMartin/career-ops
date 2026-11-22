@@ -1,0 +1,11 @@
+# Optional (tech roles): EMPLOYER_NAME values in the US DOL H-1B LCA disclosure data for the
+# companies in your pipeline, used by scripts/hunt-comp-refresh.mjs to estimate senior base pay.
+# Copy to config/lca-employers.yml. `--suggest-employers` proposes names from the data file.
+employers:
+  "Example Corp":
+    - "Example Corp, Inc."
+
+# Optional home-metro split: LCA rows in these states / cities also get their own median.
+# home:
+#   states: [CO]
+#   cities: [Denver, Boulder, Aurora]

@@ -1,0 +1,23 @@
+# Who this profile is for. Fill this in, then set active: true to start the daily jobs.
+# Nothing here is assumed to be software: field, roles and places are all yours.
+first_name: ""            # shown in the header switcher, e.g. "Sam"
+name: ""                  # full name, used in scoring prompts
+active: false             # false = no cron jobs run and nothing is spent
+field: ""                 # e.g. "nursing", "marketing", "accounting"
+# true only for software / tech roles: pay estimates may then use tech-company comp data and the
+# DOL H-1B LCA table. false = the pay factor uses posted salary ranges only.
+is_tech: false
+home: ""                  # home metro, e.g. "Seattle"
+target_roles: []          # e.g. ["Registered Nurse", "Charge Nurse"]
+level_target: ""          # e.g. "Senior individual contributor, no management"
+base_floor: null          # minimum base salary per year, e.g. 90000
+currency: USD
+locations: []             # e.g. ["Seattle area", "Remote US"]
+summary: ""               # 3-6 lines: experience, strengths, what to avoid (used by quick scores)
+# The quick scorer's 1-5 rubric (empty = a sensible default).
+quick_rubric: ""          # e.g. "5 = ..., 1 = wrong role/level/location or below the pay floor"
+# How to weigh one job against another in the head-to-head (one line per criterion).
+# Optional: write the scoring prompts yourself. Left empty, they are built from the fields above.
+quick_context: ""
+h2h_intro: ""
+h2h_preferences: ""

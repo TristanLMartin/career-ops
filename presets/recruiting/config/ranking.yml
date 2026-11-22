@@ -1,0 +1,67 @@
+# Ranking for a technical recruiter / talent acquisition partner (preset: recruiting).
+# Copied to <profile>/config/ranking.yml by `npm run onboard`; edit freely.
+# Parts are 0-100; a part with no data is left out and the rest renormalized.
+weights:
+  fit: 30        # career-ops evaluation score (1-5), once a role is evaluated
+  pay: 20        # posted base midpoint across pay_band
+  company: 15    # research_tier below (company quality / stability); unknown 0.6
+  location: 15   # remote / hybrid preference (location_scores)
+  relevance: 15  # recruiting focus words below (tech hiring, full-cycle, req load signals)
+  level: 5       # title level vs your target ladder
+  benefits: 0
+
+pay_basis: base
+pay_band: { floor: 60000, ceiling: 180000 }
+pay_missing_score: 35
+base_floor: null
+currency: USD
+
+location_scores: { 1: 100, 2: 100, 3: 40, 4: 10, 5: 60 }
+location_labels: { 1: "Home area", 2: "Remote US", 3: "Secondary area", 4: "Other", 5: "Remote (global)" }
+
+target:
+  levels: [senior, mid, lead, manager]   # keys from profile_rules.level.rules below (add junior for coordinator roles)
+  location_tiers: [1, 2, 5]
+  always_companies: []
+
+auto_score_per_day: 0
+top_picks: { min_fit: 3.8, min_level: 0.6, per_company: 2, limit: 10 }
+shortlist: { min_relevance: 35 }
+
+company_boost: {}
+research_tier: {}          # e.g. { 1.0: [CompanyA], 0.8: [CompanyB], 0.3: [CompanyC] }
+caution_companies: []      # recent layoffs / hiring freezes (badge only)
+unverified_companies: []
+company_aliases: {}
+
+# Jobs Map categories (shape per category; max 4, the rest is "Other").
+map_families:
+  Technical Recruiter: ["technical recruit", "engineering recruit", "tech recruit", "re:recruit\\w*"]
+  Sourcer: [sourcer, sourcing]
+  TA Partner: ["talent acquisition", "talent partner", "re:\\bTA\\b"]
+  Programs / Ops: ["recruiting programs", "recruiting operations", "recruiting ops", "university recruit", "campus recruit"]
+
+profile_rules:
+  location:
+    home: []          # tier 1, e.g. ["Denver", "Boulder", "re:\\bCO\\b"]
+    secondary: []     # tier 3
+  # A recruiting ladder. First rule whose words appear in the title wins; else `default`.
+  level:
+    rules:
+      - { key: exec,   label: "Head / Director+", words: ["head of", director, "re:\\bvp\\b", "vice president", chief], factor: 0.35 }
+      - { key: manager, label: "Manager",         words: ["recruiting manager", "talent acquisition manager", "re:manager"], factor: 0.6 }
+      - { key: lead,   label: "Lead / Principal", words: [lead, principal, staff], factor: 0.85 }
+      - { key: senior, label: "Senior",           words: [senior, "re:\\bsr\\.?"], factor: 1.0 }
+      - { key: junior, label: "Coordinator / Junior", words: [coordinator, junior, "re:\\bjr\\.?", associate, assistant], factor: 0.5 }
+    default: { key: mid, label: "Recruiter", factor: 0.9 }
+  relevance:
+    title_family: ["re:recruit\\w*", sourcer, sourcing, "talent acquisition", "talent partner", "ta partner", "people partner"]
+    title_strong: ["technical recruiter", "tech recruiter", "engineering recruiter", "full cycle", "full-cycle", "talent acquisition partner", sourcer, "gtm recruiter", "executive recruiter"]
+    title_off: ["strategic sourcing", procurement, "re:\\bhrbp\\b", payroll, "benefits", "re:accountant", "re:engineer\\b", "re:developer\\b", "re:sales (rep|executive)", "re:intern(ship)?"]
+    domains:
+      tech_hiring: { weight: 15, words: [engineering, "software engineers", "technical roles", "re:\\bswe\\b", "data scientists", "product managers", "technical hiring"] }
+      full_cycle: { weight: 12, words: ["full cycle", "full-cycle", "end-to-end", "intake", "offer negotiation", "closing candidates", "hiring managers"] }
+      sourcing: { weight: 10, words: [sourcing, "boolean search", "linkedin recruiter", "passive candidates", outreach, pipeline] }
+      ats_tools: { weight: 6, words: [greenhouse, lever, ashby, workday, gem, "icims", "smartrecruiters", "applicant tracking"] }
+      req_load: { weight: 5, words: ["re:\\d{1,2}\\s*(open\\s*)?reqs", "requisitions", "req load", "high volume", "hiring targets"] }
+    languages: []

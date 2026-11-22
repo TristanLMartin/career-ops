@@ -1,0 +1,35 @@
+# Ranking for any field (preset: generic). Fill in the blanks marked "e.g.".
+# Parts are 0-100; a part with no data is left out and the rest renormalized.
+weights: { fit: 35, relevance: 25, pay: 20, company: 0, level: 10, location: 10, benefits: 0 }
+pay_basis: base
+pay_band: { floor: 40000, ceiling: 150000 }   # your field's low / great base salary
+pay_missing_score: 35
+base_floor: null          # minimum base salary, or null for none
+currency: USD
+location_scores: { 1: 100, 2: 90, 3: 40, 4: 10, 5: 60 }
+location_labels: { 1: "Home area", 2: "Remote US", 3: "Secondary area", 4: "Other", 5: "Remote (global)" }
+target:
+  levels: null            # null = any level; or keys from profile_rules.level.rules
+  location_tiers: [1, 2, 5]
+  always_companies: []
+auto_score_per_day: 0     # 0 = no LLM spend until you turn it on
+top_picks: { min_fit: 3.8, min_level: 0, per_company: 3, limit: 10 }
+shortlist: { min_relevance: 40 }
+company_boost: {}
+research_tier: {}
+caution_companies: []
+unverified_companies: []
+company_aliases: {}
+profile_rules:
+  location:
+    home: []              # tier 1, e.g. ["Portland", "Beaverton", "re:\\bOR\\b"]
+    secondary: []         # tier 3, e.g. ["Seattle"]
+  level:
+    rules: []             # e.g. - { key: senior, label: Senior, words: [senior, lead], factor: 1.0 }
+    default: { key: target, label: "Target level", factor: 1.0 }
+  relevance:
+    title_family: []      # words any plausible title has, e.g. ["nurse", "RN"]
+    title_strong: []      # specialties to boost, e.g. ["ICU", "critical care"]
+    title_off: []         # titles to sink, e.g. ["travel", "LPN"]
+    domains: {}           # e.g. { clinical: { weight: 20, words: ["patient care", "acute care"] } }
+    languages: []         # tools / certifications to credit, e.g. ["BLS", "ACLS", "Epic"]

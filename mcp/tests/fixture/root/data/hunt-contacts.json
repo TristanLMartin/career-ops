@@ -1,0 +1,1 @@
+{ "contacts": { "pat.recruiter@acmerobotics.example": { "name": "Pat Example", "role": "Recruiter", "company": "Acme Robotics" }, "sam.talent@globex.example": { "name": "Sam Sample", "role": "Recruiter", "company": "Globex" } } }

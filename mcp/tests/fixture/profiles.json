@@ -1,0 +1,9 @@
+{
+  "codeRoot": "../../..",
+  "defaultProfile": "me",
+  "profiles": {
+    "me": { "dataDir": "root", "port": 1, "enabled": true },
+    "partner": { "dataDir": "partner-missing", "port": 2, "enabled": true },
+    "off": { "dataDir": "root", "port": 3, "enabled": false }
+  }
+}

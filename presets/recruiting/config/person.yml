@@ -1,0 +1,26 @@
+# Who this profile is for (preset: recruiting). `npm run onboard` fills in the blanks.
+first_name: ""
+name: ""
+active: false
+field: "technical recruiting / talent acquisition"
+is_tech: false            # posted pay ranges only (no engineering comp tables)
+home: ""
+target_roles: ["Senior Technical Recruiter", "Technical Recruiter", "Talent Acquisition Partner", "Technical Sourcer", "Lead Recruiter", "Recruiting Manager", "University Recruiter", "Recruiting Programs Manager", "Recruiting Coordinator"]
+level_target: "Senior recruiter / TA partner (individual contributor or first-line manager)"
+base_floor: null          # e.g. 90000
+currency: USD
+locations: []             # e.g. ["Austin area", "Remote US"]
+summary: ""               # years recruiting, functions hired for (engineering, GTM, exec), ATS tools, agency vs in-house
+quick_rubric: >-
+  Score each job below 1-5 for this candidate: 5 = in-house recruiting role at the right level,
+  good pay, a stable company and a sane req load, worth applying now; 4 = strong; 3 = plausible;
+  2 = weak (agency/contract churn, coordinator-level, wrong function); 1 = not a recruiting role,
+  wrong level or location, or below the pay floor.
+h2h_preferences: |-
+  - Pay: posted base first; higher is better; below the floor is a poor fit.
+  - Company: stable, growing, well-run teams beat early chaos; recent layoffs or hiring freezes are a real negative.
+  - Remote or hybrid near home beats on-site.
+  - Req load and scope: a realistic number of open reqs, full-cycle ownership, and hiring for technical roles.
+  - In-house over agency; contract-to-hire only if pay is clearly better.
+quick_context: ""
+h2h_intro: ""

@@ -1,0 +1,7 @@
+# Web UI instances for the header profile switcher (optional; one per person on this machine).
+# Copy to config/profile-instances.yml. Each instance runs the same build with
+# CAREER_OPS_PROFILE_DIR pointing at its profile directory. The name shown comes from each
+# profile's config/person.yml (first_name), or `label` until that is filled in.
+instances:
+  - { id: me, dir: ".", port: 3000 }
+  # - { id: partner, dir: profiles/partner, port: 3001, label: "Partner" }
