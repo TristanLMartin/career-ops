@@ -5,6 +5,7 @@ import { ToolError, resolveProfile } from "./config.mjs";
 import { ProfileData, jobId } from "./data.mjs";
 import { dashboardPost, dashboardGetJson } from "./dashboard-client.mjs";
 import { localWhen, trackerLabel, parseTrackerRef } from "./format.mjs";
+import { evalTools } from "./eval-tools.mjs";
 
 const k = (n) => `$${Math.round(n / 1000)}k`;
 const clip = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -390,6 +391,9 @@ function studyOut(s) {
  * Register every tool on an McpServer. onCall({tool, profile, ok, ms, error}) is told about each call
  * (no arguments, so nothing personal reaches the log).
  */
+// Evaluation runs (the only tools that spend): src/eval-tools.mjs.
+Object.assign(TOOLS, evalTools({ profileArg, jobIndex }));
+
 export function registerTools(server, { config, onCall = () => {} }) {
   for (const [name, t] of Object.entries(TOOLS)) {
     server.registerTool(name, { description: t.description, inputSchema: t.input }, async (args) => {

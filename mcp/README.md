@@ -12,6 +12,10 @@ follow-ups, tick study tasks, add a job by URL, and get a Home summary.
 - **Writes** go only through the running dashboard's HTTP endpoints, so its locks, validation
   and atomic writes apply. The server never writes data files itself.
 - No delete tools. Nothing sends email or messages.
+- **Spending:** only `evaluate_jobs` spends model usage. It runs career-ops' own eval hook
+  (`scripts/hunt-eval-run.mjs`), which records the run, enforces the dollar cap and logs spend to
+  `data/hunt-usage.tsv`. Over $10 it needs `confirm: true`; call it only for spend the user
+  approved. One run at a time. A profile with `evals_paused: true` in `config/ranking.yml` is refused.
 
 ## Set up
 
@@ -97,6 +101,9 @@ Every tool takes an optional `profile` (a profile id from your config; default: 
 | `complete_study_task(id, done=true)` | Tick / untick a study task | `POST /api/profile/study` |
 | `add_job_by_url(url, company?, title?, location?, description?, force?)` | The dashboard's Add-a-job flow incl. dedupe | `POST /api/profile/add-job` |
 | `get_summary()` | Home in a few lines (Needs you, In flight, Today's study, New since last look) | `GET /api/profile/home` |
+| `evaluate_jobs(job_ids? \| filter?, model: sonnet-lite\|opus-full, max_spend_usd, two_pass?: {threshold, model}, confirm?)` | Starts a recorded, capped evaluation run (default filter = the profile's target filters, highest quick score first); returns `run_id`, job count, estimate. Over $10 needs `confirm` | `scripts/hunt-eval-run.mjs start` (spends) |
+| `get_eval_run(run_id, results_limit?)` | State, jobs done/total per pass, spend vs cap, results so far (4.0+ first) | read (`… status`) |
+| `list_eval_runs(limit?)` | Recent runs, newest first, with each run's top 5 | read (`… list`) |
 
 ## Auth and logs
 
