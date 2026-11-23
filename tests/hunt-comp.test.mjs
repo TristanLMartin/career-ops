@@ -83,3 +83,17 @@ test("tcScore and the UI line", () => {
   assert.equal(line, "base $200k–280k · est. TC ~$460k (high confidence, private equity)");
   assert.equal(formatPayWithTc(null, null), null);
 });
+
+test("estimateTc: a posted band spanning several levels (top > 1.8x bottom) is not used to scale", () => {
+  const map = loadCompDoc(DOC);
+  const snow = compFor("Snowflake", map);
+  // An "all levels" band: $98k-$317k. Its midpoint says nothing about the level.
+  const t = estimateTc(snow, pay(98000, 317000));
+  assert.equal(t.usd, 400000);
+  assert.equal(t.basis, "company median (posted band spans levels)");
+});
+
+test("estimateTc: says where the figure comes from", () => {
+  const t = estimateTc(compFor("Snowflake", loadCompDoc(DOC)), null);
+  assert.equal(t.source, "research table");
+});
