@@ -2,18 +2,30 @@
  * hunt: the study days (data/study/days.md) and the study docs around them. Pure; testable.
  *
  * days.md: "## Phase …" > optional "### Week …" > "### Day N: theme" / "### Fast-track Day N",
- * each followed by "- " bullets. Every bullet is one tickable item, keyed by day + bullet index
- * (stableId), stored with the other ticks in data/study-state.json.
+ * each followed by "- " bullets. Every bullet is one tickable item; its ticks live in
+ * data/study-state.json under the item's id.
+ *
+ * Item ids: a bullet ending in `<!-- id:xxxx -->` keeps that id for good (edits, moves and day
+ * renumbering never change it); a bullet without one is keyed by day + bullet index (stableId), as
+ * before. The plan editor (hunt-study-plan.mjs) writes every bullet's current id into the file
+ * on its first edit, so existing ticks survive. `<!-- id:xxxx archived -->` hides the item (kept
+ * in day.archived, out of items, progress and the current-day logic).
  */
 import { stableId } from "./hunt-study.mjs";
 
 export const ITEM_TYPES = Object.freeze(["Coding", "Design", "Stories", "Drill", "Company", "Mock", "Read", "Project", "Rest", "AI round practice", "Python refresher first"]);
 
-/** "Coding: ★ Two Sum (1)" -> { type: "Coding", text: "★ Two Sum (1)", star: true }. */
+/** A bullet's trailing id marker: "<!-- id:abc123 -->" or "<!-- id:abc123 archived -->". */
+export const ITEM_MARKER = /\s*<!--\s*id:([a-z0-9]{2,40})(\s+archived)?\s*-->\s*$/;
+
+/**
+ * "Coding: ★ Two Sum (1)" -> { type: "Coding", text: "★ Two Sum (1)", star: true }. The type is any
+ * label of one to four capitalized words before ": " (Coding, Design, Inference, AI round practice...).
+ */
 export function splitItem(line) {
-  const s = String(line ?? "").trim();
-  const m = s.match(/^([A-Z][A-Za-z ]{1,30}?):\s+(.*)$/);
-  const type = m && ITEM_TYPES.includes(m[1]) ? m[1] : null;
+  const s = String(line ?? "").replace(ITEM_MARKER, "").trim();
+  const m = s.match(/^([A-Z][A-Za-z0-9#+]*(?: [A-Za-z0-9#+]+){0,3}):\s+(.*)$/);
+  const type = m ? m[1] : null;
   const text = type ? m[2] : s;
   return { type: type === "Python refresher first" ? "Coding" : type, text: type === "Python refresher first" ? `Python refresher first: ${m[2]}` : text, star: /★/.test(text) };
 }
@@ -43,7 +55,7 @@ export function parseDays(md) {
         const key = `${fast ? "ft" : "d"}${n}`;
         if (!section) { section = { title: "", weeks: [] }; sections.push(section); }
         if (!week) { week = { title: "", days: [] }; section.weeks.push(week); }
-        day = { key, n, fast, theme: (dm[3] ?? "").trim() || (fast ? `Fast-track day ${n}` : ""), title, items: [], section: section.title, week: week.title };
+        day = { key, n, fast, theme: (dm[3] ?? "").trim() || (fast ? `Fast-track day ${n}` : ""), title, items: [], archived: [], section: section.title, week: week.title };
         week.days.push(day);
         days.push(day);
       } else {
@@ -56,8 +68,10 @@ export function parseDays(md) {
     }
     const b = line.match(/^\s*-\s+(.*)$/);
     if (b && day) {
-      const index = day.items.length;
-      day.items.push({ id: stableId("days", day.key, index), index, ...splitItem(b[1]) });
+      const index = day.items.length + day.archived.length;
+      const mk = b[1].match(ITEM_MARKER);
+      const item = { id: mk ? mk[1] : stableId("days", day.key, index), index, ...splitItem(b[1]) };
+      if (mk?.[2]) day.archived.push({ ...item, archived: true }); else day.items.push(item);
       continue;
     }
     if (!section && line.trim() && !line.startsWith("#")) intro.push(line.trim());
