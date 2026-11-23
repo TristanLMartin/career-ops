@@ -10,10 +10,10 @@ import { US } from "../lib/hunt-levels.mjs";
 const HOME = "greater-austin-area";
 
 test("acceptSlug takes only a result whose name normalizes to ours", () => {
-  assert.deepEqual(acceptSlug("Stoke Space", [{ name: "Stoke Space", slug: "stoke-space" }]), { slug: "stoke-space", name: "Stoke Space" });
+  assert.deepEqual(acceptSlug("Acme Rockets", [{ name: "Acme Rockets", slug: "acme-rockets" }]), { slug: "acme-rockets", name: "Acme Rockets" });
   assert.deepEqual(acceptSlug("Salesforce, Inc.", [{ name: "Salesforce", slug: "salesforce" }]), { slug: "salesforce", name: "Salesforce" });
   assert.equal(acceptSlug("Ramp", [{ name: "Rampart Communications", slug: "rampart" }]), null);
-  assert.equal(acceptSlug("Hex", []), null);
+  assert.equal(acceptSlug("Globex", []), null);
 });
 
 test("companiesFromEnrich: tracked first, then shortlisted, then evaluated; deduped; capped", () => {
