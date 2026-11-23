@@ -96,3 +96,14 @@ test("validateComp: schema, ranges, ratio 1.0-4.0, stale as_of", () => {
   assert.ok(validateComp([{ ...ok, as_of: "2026-04-01" }], { today }).warnings.some((w) => /older than 6 months/.test(w)));
   assert.deepEqual(validateComp([{ ...ok, tc_median_usd: null, base_usd: null }], { today }).errors, [], "no-data entries are allowed");
 });
+
+test("filterRow: a filed wage range counts at its midpoint; a single wage as filed", () => {
+  const row = (from, to) => ({ CASE_STATUS: "Certified", EMPLOYER_NAME: "Stripe, LLC", JOB_TITLE: "Senior Software Engineer", WORKSITE_CITY: "Austin", WORKSITE_STATE: "TX", WAGE_RATE_OF_PAY_FROM: from, WAGE_RATE_OF_PAY_TO: to, WAGE_UNIT_OF_PAY: "Year" });
+  // Range filers (Stripe, Snowflake, Databricks...) put the band's bottom in FROM: 200k-280k is 240k.
+  assert.equal(filterRow(row("200000", "280000"), index).wage, 240000);
+  // Single-wage filers (Google, Salesforce...) leave TO empty or equal.
+  assert.equal(filterRow(row("236000", ""), index).wage, 236000);
+  assert.equal(filterRow(row("236000", "236000"), index).wage, 236000);
+  // A TO below FROM is a typo: ignored.
+  assert.equal(filterRow(row("236000", "23600"), index).wage, 236000);
+});
