@@ -5,7 +5,7 @@ import { ToolError, resolveProfile } from "./config.mjs";
 import { ProfileData, jobId } from "./data.mjs";
 import { dashboardPost, dashboardGetJson } from "./dashboard-client.mjs";
 import { localWhen, trackerLabel, parseTrackerRef } from "./format.mjs";
-import { evalTools } from "./eval-tools.mjs";
+import { evalTools, runHook } from "./eval-tools.mjs";
 import { studyTools } from "./study-tools.mjs";
 
 const k = (n) => `$${Math.round(n / 1000)}k`;
@@ -102,13 +102,14 @@ const profileArg = z.string().optional().describe("Whose dashboard: a profile id
 
 export const TOOLS = {
   search_jobs: {
-    description: "Search the job pipeline (scanned postings plus tracker jobs). Filters combine with AND; one row per dedupe group unless include_duplicates. Returns id, company, title, location, quick_score (1-5), true_rank, composite rank, base pay, TC estimate, status, url. Use get_job(id) for detail.",
+    description: "Search the job pipeline (scanned postings plus tracker jobs). Filters combine with AND; one row per dedupe group unless include_duplicates. Returns id, company, title, location, score (the one 1-5 score: the evaluation's decimal once judged, else the Haiku quick score), scored_by (sonnet | quick | none), quick_score, true_rank, composite rank, base pay, TC estimate, status, url. scored_by \"none\" = a new posting, quick-scored automatically by the daily job, not a problem. \"Inbox\" status means untracked, not \"waiting for an evaluation\": most Inbox jobs are skipped on purpose (see get_scoring_status). Use get_job(id) for detail.",
     input: {
       profile: profileArg,
       query: z.string().max(200).optional().describe("Words matched against company, title, location and the quick-score note"),
       company: z.string().max(200).optional(),
       status: z.string().max(40).optional().describe('Tracker status (e.g. Applied, Interview) or "Inbox" for untracked postings'),
-      min_quick_score: z.number().min(0).max(5).optional(),
+      min_quick_score: z.number().min(0).max(5).optional().describe("Minimum score (the evaluation's once judged, else the quick score)"),
+      judged: z.enum(["judged", "unjudged", "all"]).default("all").describe("judged = an evaluation scored it"),
       location: z.string().max(100).optional(),
       sort: z.enum(["true_rank", "composite", "quick_score", "pay", "newest"]).default("true_rank"),
       limit: z.number().int().min(1).max(50).default(15),
@@ -123,7 +124,9 @@ export const TOOLS = {
         if (a.company && !has(e.company, a.company.toLowerCase())) return false;
         if (a.location && !has(e.location, a.location.toLowerCase())) return false;
         if (a.status && status.toLowerCase() !== a.status.toLowerCase()) return false;
-        if (a.min_quick_score != null && !((e.quick_score ?? e.fit ?? -1) >= a.min_quick_score)) return false;
+        if (a.min_quick_score != null && !((typeof e.fit === "number" ? e.fit : e.quick_score ?? -1) >= a.min_quick_score)) return false;
+        if (a.judged === "judged" && typeof e.fit !== "number") return false;
+        if (a.judged === "unjudged" && typeof e.fit === "number") return false;
         if (words.length) {
           const hay = `${e.company} ${e.role} ${e.displayRole ?? ""} ${e.location} ${e.quick_why ?? ""}`.toLowerCase();
           if (!words.every((w) => hay.includes(w))) return false;
@@ -143,6 +146,8 @@ export const TOOLS = {
         total: rows.length,
         jobs: rows.slice(0, a.limit).map(({ id, url, e, status }) => compact({
           id, company: e.company, title: e.displayRole ?? e.role, location: clip(e.location, 60),
+          score: typeof e.fit === "number" ? e.fit : e.quick_score,
+          scored_by: typeof e.fit === "number" ? "sonnet" : e.quick_score != null ? "quick" : "none",
           quick_score: e.quick_score, true_rank: idx.trueRank.get(url), composite_rank: idx.compRank.get(url),
           base: baseLabel(e), tc_est: tcLabel(e), status, dupes: e.groupSize > 1 ? e.groupSize - 1 : null, url,
         })),
@@ -369,10 +374,15 @@ export const TOOLS = {
       } else lines.push(s.days.length ? "Today's study: plan complete" : "Today's study: no plan yet");
       lines.push(`New since last look (${fresh.length})${fresh.length ? ":" : ""}`);
       for (const e of fresh.slice(0, 5)) lines.push(`- rank ${e.rank} ${clip(`${e.company} · ${e.role}`, 80)} [${jobId(e.url)}]`);
+      try {
+        const b = await runHook(data.p, ["backlog"]);
+        const skipped = Object.values(b.skipped_on_purpose ?? {}).reduce((n, x) => n + x.count, 0);
+        lines.push(`Scoring: ${b.judged} judged · ${b.sonnet_eligible.count} worth an evaluation run (~$${b.sonnet_eligible.estimate_usd}, needs the user's OK) · ${b.no_quick_score_yet?.count ?? 0} new with no quick score yet (the daily quick-score job handles them; normal, not a problem) · ${skipped} skipped on purpose · ${b.hidden_by_rules?.count ?? 0} hidden by the full-time / base-floor rules. Details: get_scoring_status.`);
+      } catch { /* optional here; get_scoring_status reports the hook's own error */ }
       const scan = await data.lastScanAt();
       const inbox = await data.pendingInboxCount();
       const cost = await data.weekCost();
-      lines.push(`Last scan ${scan ? localWhen(scan) : "never"} · ${inbox.toLocaleString("en-US")} in inbox · $${cost.toFixed(2)} AI usage, last 7 days`);
+      lines.push(`Last scan ${scan ? localWhen(scan) : "never"} · ${inbox.toLocaleString("en-US")} scanned postings not in the tracker (a pile, not a to-do list) · $${cost.toFixed(2)} AI usage, last 7 days`);
       return lines.join("\n");
     },
   },

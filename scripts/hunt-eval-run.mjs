@@ -9,6 +9,7 @@
 //   start  [selection] [run options] --yes     records data/eval-runs/<id>.json and starts the run detached.
 //   run    <id>                                 the detached worker (resumes when restarted).
 //   status <id> | list [--limit N]              JSON progress: jobs done/total, spend vs cap, scores 4.0+ first.
+//   backlog                                     JSON: judged / not judged / no quick score yet / eligible, and why the rest is skipped.
 //
 // Selection: --urls-file F (one URL per line) or the default filter:
 //   untracked Inbox group leaders not yet evaluated, highest Haiku quick score first (a 1 is
@@ -35,7 +36,7 @@ import { trueRank } from "../web/src/lib/hunt-home-v2.mjs";
 import { applySignals } from "../web/src/lib/hunt-job-signals.mjs";
 import { filterJob } from "./hunt-job-filters.mjs";
 import { quickFirst, worthJudging } from "../lib/hunt-judge-order.mjs";
-import { gatedUrls } from "../lib/hunt-gate-history.mjs";
+import { gatedUrls, gateHistory } from "../lib/hunt-gate-history.mjs";
 
 const CODE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Typical cost per job, measured on real batches (Sonnet lite ~$0.125, Opus full ~$1.85); estimates only.
@@ -63,26 +64,117 @@ function trackedUrls(root) {
   return new Set([...text.matchAll(/https?:\/\/[^\s|)\]]+/g)].map((m) => m[0]));
 }
 
-/** The fact-base default selection, Best overall order. */
-export function selectJobs(root, { limit = 50, company = null, maxRank = null } = {}) {
+/** Jobs, target, tracker URLs, prior evals and gate history: what selectJobs and scoringBacklog read. */
+function selectionContext(root) {
   let target = null;
   try { target = loadYaml(fs.readFileSync(path.join(root, "config", "ranking.yml"), "utf8"))?.target ?? null; } catch { target = null; }
   const doc = readJson(path.join(root, "data", "hunt-enrich.json"), { jobs: {} });
   const jobs = applySignals(structuredClone(doc.jobs ?? {}), { ratings: readJson(path.join(root, "data", "hunt-ratings.json"), {}), liveness: readJson(path.join(root, "data", "hunt-liveness.json"), {}) });
-  const tracked = trackedUrls(root);
-  const prev = readJson(path.join(root, "data", "hunt-prev-fit.json"), {});
-  const gated = gatedUrls(root); // stopped at a gate before (lib/hunt-gate-history.mjs)
+  return {
+    target,
+    all: jobs,
+    ranked: trueRank(jobs),
+    tracked: trackedUrls(root),
+    prev: readJson(path.join(root, "data", "hunt-prev-fit.json"), {}),
+    gated: gatedUrls(root), // stopped at a gate before (lib/hunt-gate-history.mjs)
+  };
+}
+
+/** filterJob's first reason ("level:staff", "location:tier4", "title", ...) as a skip key. */
+function targetReason(reasons) {
+  const r = String(reasons?.[0] ?? "");
+  if (r.startsWith("level")) return "level";
+  if (r.startsWith("location")) return "location";
+  if (r === "title") return "title";
+  if (r === "contract") return "contract";
+  if (/floor/.test(r)) return "below_floor";
+  return "target";
+}
+
+/**
+ * Why the default selection skips a ranked job, or null when it would pick it. One place, so the
+ * run and the backlog report (scoringBacklog, the MCP get_scoring_status tool) never disagree.
+ */
+export function skipReason(e, { target, tracked, prev, gated }) {
+  if (e.report || e.fit != null || prev[e.url]?.reeval_ok) return "judged";
+  if (tracked.has(e.url) || e.status) return "tracked";
+  if (e.excluded) return "hidden";
+  if (e.closed) return "closed";
+  if (!worthJudging(e)) return "quick_1";
+  if (gated.has(e.url)) return "gated";
+  if (e.belowFloor) return "below_floor";
+  const f = filterJob(e, target);
+  if (!f.ok) return targetReason(f.reasons);
+  return null;
+}
+
+/** The default selection, Best overall order. */
+export function selectJobs(root, { limit = 50, company = null, maxRank = null } = {}) {
+  const ctx = selectionContext(root);
   const co = company ? String(company).toLowerCase() : null;
-  return trueRank(jobs).filter((e) => {
-    if (tracked.has(e.url) || e.status || e.report || e.fit != null || prev[e.url]?.reeval_ok) return false;
-    if (!worthJudging(e)) return false;
-    if (e.excluded || gated.has(e.url)) return false;
-    if (e.closed || e.belowFloor) return false;
-    if (!filterJob(e, target).ok) return false;
+  return ctx.ranked.filter((e) => {
+    if (skipReason(e, ctx)) return false;
     if (co && !String(e.company ?? "").toLowerCase().includes(co)) return false;
     if (maxRank && e.rank > maxRank) return false;
     return true;
   }).sort(quickFirst((a, b) => a.rank - b.rank)).slice(0, limit).map((e) => ({ url: e.url, company: e.company, role: e.displayRole ?? e.role, rank: e.rank, quick: e.quick_score ?? null }));
+}
+
+const SKIP_LABELS = {
+  tracked: "in the tracker without a score (added by hand, or applied / discarded before any eval)",
+  judged: "already judged by an evaluation",
+  hidden: "hidden by the profile's rules (not full-time, or base band below the configured base floor)",
+  closed: "posting closed",
+  quick_1: "quick score 1: never worth an evaluation",
+  gated: "an earlier eval stopped at a gate (dealbreaker or agency: never again; unreadable page: retried after 7 days)",
+  below_floor: "base band below the configured base floor",
+  level: "outside the configured target levels (config/ranking.yml target.levels)",
+  location: "outside the configured target locations (config/ranking.yml target.location_tiers / relocate)",
+  title: "title matches target.exclude_titles",
+  contract: "not full-time",
+  target: "outside the configured target (config/ranking.yml target)",
+};
+
+/**
+ * What is and isn't scored, for agents that would otherwise read "no score" as broken. Counts
+ * dedupe-group leaders only (one row per job, as the Jobs list shows them).
+ */
+export function scoringBacklog(root) {
+  const ctx = selectionContext(root);
+  const leaders = ctx.ranked.filter((e) => e.groupLeader !== false);
+  const skip = {}, unjudgedByQuick = {}, eligibleByQuick = {};
+  const noQuick = [], eligible = [];
+  for (const e of leaders) {
+    const r = skipReason(e, ctx);
+    const q = e.quick_score == null ? "none" : String(e.quick_score);
+    if (r !== "judged" && r !== "tracked") unjudgedByQuick[q] = (unjudgedByQuick[q] ?? 0) + 1;
+    if (e.quick_score == null && e.fit == null && !e.report) noQuick.push({ e, r });
+    if (r) skip[r] = (skip[r] ?? 0) + 1;
+    else { eligible.push(e); eligibleByQuick[q] = (eligibleByQuick[q] ?? 0) + 1; }
+  }
+  const est = estimate(eligible.length, "sonnet-lite");
+  const hidden = Object.values(ctx.all).filter((e) => e && e.excluded && e.groupLeader !== false && !e.closed);
+  const hiddenWhy = {};
+  for (const e of hidden) hiddenWhy[e.excluded] = (hiddenWhy[e.excluded] ?? 0) + 1;
+  return {
+    jobs: leaders.length,
+    hidden_by_rules: { count: hidden.length, by_reason: hiddenWhy, what: "Not full-time, or base band below the configured base floor (exclude_contract / exclude_below_floor): not ranked, not on the Jobs list, never evaluated. Not counted in jobs." },
+    judged: skip.judged ?? 0,
+    tracked: skip.tracked ?? 0,
+    not_judged_by_quick_score: unjudgedByQuick,
+    no_quick_score_yet: {
+      count: noQuick.length,
+      what: "New postings since the last quick-score pass. Not a failure and not a backlog: the daily quick-score job (scripts/hunt-cron.sh autoscore) gives every posting without one a Haiku 1-5 quick score (~$0.003 each, automatic).",
+      jobs: noQuick.slice(0, 40).map(({ e, r }) => ({ id: jobIdOf(e.url), company: e.company, title: e.displayRole ?? e.role, true_rank: e.rank, eligible: !r, skipped_because: r ? SKIP_LABELS[r] : null })),
+    },
+    sonnet_eligible: {
+      count: eligible.length,
+      by_quick_score: eligibleByQuick,
+      estimate_usd: est.pass1,
+      what: "Untracked, unjudged jobs the default evaluate_jobs filter would pick, highest quick score first. Only these are worth an evaluation run; everything in skipped_on_purpose is skipped on purpose.",
+    },
+    skipped_on_purpose: Object.fromEntries(Object.entries(skip).filter(([k]) => k !== "judged" && k !== "tracked").map(([k, n]) => [k, { count: n, why: SKIP_LABELS[k] }])),
+  };
 }
 
 export function estimate(count, preset, twoPass = null) {
@@ -132,10 +224,16 @@ export function runStatus(root, id) {
   const r1 = passResults(root, m.jobs.map((j) => j.url), p1.model, m.createdAt, m.pass2StartedAt ?? until);
   const r2 = p2 ? passResults(root, m.pass2Urls ?? [], p2.model, m.pass2StartedAt ?? m.createdAt, until) : new Map();
   const spent = money((b1?.costUsd ?? 0) + (b2?.costUsd ?? 0));
+  const gates = gateHistory((() => { try { return fs.readFileSync(path.join(root, "data", "hunt-usage.tsv"), "utf8"); } catch { return ""; } })());
+  // A failed job is almost always a gate stop (the evaluation read the posting and refused to
+  // score it), not an error: "permanent" = dealbreaker or agency, "unreadable" = page didn't load.
+  const failKind = (url) => gates.get(url)?.kind ?? "error";
+  const STOP = { permanent: "gate: dealbreaker/agency", unreadable: "gate: page unreadable", error: "error" };
   const results = m.jobs.map((j) => {
     const a = r1.get(j.url), b = r2.get(j.url);
     const final = b?.score ?? a?.score ?? null;
-    return { job_id: j.id, company: j.company, title: j.role, true_rank: j.rank, score: final, pass1_score: a?.score ?? null, pass2_score: b?.score ?? null, report: b?.report ?? a?.report ?? null, failed: a && !a.ok ? true : undefined };
+    const failed = a && !a.ok;
+    return { job_id: j.id, company: j.company, title: j.role, true_rank: j.rank, score: final, pass1_score: a?.score ?? null, pass2_score: b?.score ?? null, report: b?.report ?? a?.report ?? null, failed: failed ? true : undefined, stopped: failed ? STOP[failKind(j.url)] : undefined };
   }).filter((r) => r.pass1_score != null || r.pass2_score != null || r.failed)
     .sort((x, y) => ((y.score ?? 0) >= 4) - ((x.score ?? 0) >= 4) || (y.score ?? -1) - (x.score ?? -1));
   const alive = m.workerPid ? (() => { try { process.kill(m.workerPid, 0); return true; } catch { return false; } })() : false;
@@ -146,6 +244,13 @@ export function runStatus(root, id) {
     model: m.preset, two_pass: m.twoPass ?? null,
     jobs_total: m.jobs.length, pass1_done: b1 ? (b1.done ?? 0) + (b1.failed ?? 0) : 0, pass1_failed: b1?.failed ?? 0,
     pass2_total: m.pass2Urls?.length ?? null, pass2_done: b2 ? (b2.done ?? 0) + (b2.failed ?? 0) : 0,
+    pass1_failed_breakdown: (() => {
+      const c = { gate_dealbreaker_or_agency: 0, gate_page_unreadable: 0, error: 0 };
+      const key = { permanent: "gate_dealbreaker_or_agency", unreadable: "gate_page_unreadable", error: "error" };
+      for (const r of results) if (r.failed) c[key[failKind(m.jobs.find((j) => j.id === r.job_id)?.url)]]++;
+      return c;
+    })(),
+    failed_means: "Gate stops are the evaluator refusing to score a posting it read (a dealbreaker, an agency, or a page that wouldn't load), not crashes. Don't re-run them: dealbreakers and agencies are never picked again, and unreadable pages are retried automatically after 7 days. Only 'error' entries are real failures.",
     spent_usd: spent, cap_usd: m.capUsd, estimate_usd: m.estimate?.total ?? null, note: m.note ?? null,
     at_or_above_4: results.filter((r) => (r.score ?? 0) >= 4).length, results,
   };
@@ -279,6 +384,7 @@ if (isMainModule(import.meta.url)) {
     else if (cmd === "run") runWorker(root, argv[1]);
     else if (cmd === "status") { const s = runStatus(root, argv[1]); if (!s) throw new Error(`no run ${argv[1]}`); out(s); }
     else if (cmd === "list") out(listRuns(root, Number(arg("--limit", 10))));
-    else { console.error("usage: hunt-eval-run.mjs plan|start|run <id>|status <id>|list"); process.exit(2); }
+    else if (cmd === "backlog") out(scoringBacklog(root));
+    else { console.error("usage: hunt-eval-run.mjs plan|start|run <id>|status <id>|list|backlog"); process.exit(2); }
   } catch (e) { console.error(`hunt-eval-run: ${e.message}`); process.exit(1); }
 }

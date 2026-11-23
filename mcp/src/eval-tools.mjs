@@ -83,8 +83,20 @@ export function evalTools({ profileArg, jobIndex }) {
       },
     },
 
+    get_scoring_status: {
+      description: "The truth about what is and isn't scored. Read this BEFORE saying jobs are unscored, missing, failed or need a run. Returns: judged (an evaluation scored it); no_quick_score_yet (new postings; the daily quick-score job gives each a Haiku 1-5 score automatically, so they are NOT a problem and need no paid run); sonnet_eligible (the only jobs worth an evaluation run, with the cost); skipped_on_purpose (quick score 1, outside the configured target, earlier gate stop: each with its reason); hidden_by_rules (not full-time or below the configured base floor). Spends nothing.",
+      input: { profile: profileArg },
+      async run(data) {
+        const b = await runHook(data.p, ["backlog"]);
+        return {
+          read_me: "Not judged is normal. Don't call a job with no score broken or a gate stop a failure, and don't propose re-running either. An evaluation run only makes sense for sonnet_eligible, and only with the user's OK.",
+          ...b,
+        };
+      },
+    },
+
     get_eval_run: {
-      description: "Progress of one evaluation run: state, jobs done/total per pass, spend so far vs its cap, and results so far (job id, company, title, score), 4.0+ first.",
+      description: "Progress of one evaluation run: state, jobs done/total per pass, spend so far vs its cap, and results so far (job id, company, title, score), 4.0+ first. pass1_failed is mostly gate stops (pass1_failed_breakdown): the evaluator read the posting and refused it (dealbreaker, agency, unreadable page). Those are not errors; never propose retrying them. Only the 'error' count is real failures.",
       input: { profile: profileArg, run_id: z.string().regex(RUN_ID, "run ids look like ev-202611222100-a1f0"), results_limit: z.number().int().min(0).max(500).default(40) },
       async run(data, a) {
         const s = await runHook(data.p, ["status", a.run_id]);

@@ -102,7 +102,8 @@ Every tool takes an optional `profile` (a profile id from your config; default: 
 | `add_job_by_url(url, company?, title?, location?, description?, force?)` | The dashboard's Add-a-job flow incl. dedupe | `POST /api/profile/add-job` |
 | `get_summary()` | Home in a few lines (Needs you, In flight, Today's study, New since last look) | `GET /api/profile/home` |
 | `evaluate_jobs(job_ids? \| filter?, model: sonnet-lite\|opus-full, max_spend_usd, two_pass?: {threshold, model}, confirm?)` | Starts a recorded, capped evaluation run (default filter = the profile's target filters, highest quick score first); returns `run_id`, job count, estimate. Over $10 needs `confirm` | `scripts/hunt-eval-run.mjs start` (spends) |
-| `get_eval_run(run_id, results_limit?)` | State, jobs done/total per pass, spend vs cap, results so far (4.0+ first) | read (`… status`) |
+| `get_scoring_status()` | Judged / no quick score yet (new; the daily quick-score job handles them) / eligible for an evaluation run with cost / skipped on purpose with reasons / hidden by rules | read (`… backlog`) |
+| `get_eval_run(run_id, results_limit?)` | State, jobs done/total per pass, spend vs cap, results so far (4.0+ first); failures split into gate stops vs errors | read (`… status`) |
 | `list_eval_runs(limit?)` | Recent runs, newest first, with each run's top 5 | read (`… list`) |
 | `get_study_plan(from_day?, to_day?, include_fast_track?)` | Every study day: number, title, theme, section, tasks (id, type, text, star, done; archived ones flagged) | read |
 | `add_study_task(day, type?, text, star?, position?)` / `update_study_task(task_id, text?, type?, star?, day?, position?)` | Add, edit or move a task; type is free text; ids and done state never change | `POST /api/profile/study-plan` |

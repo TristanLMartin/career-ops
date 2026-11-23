@@ -25,6 +25,10 @@ test("search_jobs: dedupe leaders only, true-rank order, compact fields", async 
   assert.equal(acme.base, "$180k–$240k");
   assert.equal(acme.tc_est, "$310k (medium)");
   assert.equal(acme.status, "Interview");
+  assert.equal(acme.score, 4.2); // the evaluation's decimal replaces the quick 5
+  assert.equal(acme.scored_by, "sonnet");
+  assert.equal(value.jobs[2].score, 4);
+  assert.equal(value.jobs[2].scored_by, "quick");
   assert.equal(value.jobs[1].dupes, 1);
   assert.equal(value.jobs[2].status, "Inbox");
 });
@@ -32,6 +36,10 @@ test("search_jobs: dedupe leaders only, true-rank order, compact fields", async 
 test("search_jobs: filters and sorts", async () => {
   let r = await callTool(config, "search_jobs", { query: "seattle", min_quick_score: 4 });
   assert.deepEqual(r.value.jobs.map((j) => j.company), ["Acme Robotics", "Hooli"]);
+  r = await callTool(config, "search_jobs", { judged: "judged" });
+  assert.deepEqual(r.value.jobs.map((j) => j.company), ["Acme Robotics"]);
+  r = await callTool(config, "search_jobs", { judged: "unjudged" });
+  assert.equal(r.value.total, 3);
   r = await callTool(config, "search_jobs", { status: "inbox" });
   assert.deepEqual(r.value.jobs.map((j) => j.company).sort(), ["Hooli", "Vandelay Industries"]);
   r = await callTool(config, "search_jobs", { company: "globex", include_duplicates: true });
@@ -205,7 +213,7 @@ test("get_summary: needs / in flight / new come from the dashboard's /api/profil
   assert.match(text, /- ID 2 Globex · Platform Engineer \(Applied\)\n/);
   assert.match(text, /Today's study: /); // still read locally
   assert.match(text, new RegExp(`New since last look \\(1\\):\\n- rank 3 Hooli · Staff Engineer \\[${jobId("https://jobs.example.com/hooli/3")}\\]`));
-  assert.match(text, /Last scan Sun, Nov 22, 12:15 PM EST · 1 in inbox · \$0\.00 AI usage, last 7 days/);
+  assert.match(text, /Last scan Sun, Nov 22, 12:15 PM EST · 1 scanned postings not in the tracker \(a pile, not a to-do list\) · \$0\.00 AI usage, last 7 days/);
   assert.doesNotMatch(text, /#\d/);
   assert.ok(text.split("\n").length <= 30);
 });

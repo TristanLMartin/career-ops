@@ -4,7 +4,7 @@ import { test } from "node:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { selectJobs, estimate, planRun, runStatus, evalsPaused } from "../scripts/hunt-eval-run.mjs";
+import { selectJobs, estimate, planRun, runStatus, evalsPaused, scoringBacklog } from "../scripts/hunt-eval-run.mjs";
 
 const job = (company, extra = {}) => ({ company, role: `${company} Senior Engineer`, source: "inbox", level: { key: "senior", factor: 1 }, locationTier: 1, fit: null, composite: 50, relevance: 80, quick_score: 4, ...extra });
 
@@ -107,4 +107,24 @@ test("selectJobs skips not-full-time jobs a profile excludes, and jobs an earlie
   fs.writeFileSync(f, JSON.stringify(doc));
   fs.writeFileSync(path.join(root, "data", "hunt-usage.tsv"), "date\tmodel\tstatus\tsecs\ttokens\tcost_usd\treport\tcompany\trole\turl\n2026-11-22T10:00:00Z\tclaude-sonnet-5-5 (reeval lite)\terror: gated: dealbreaker: floor\t1\t1\t0.05\t\tDelta\tD\thttps://d/4\n");
   assert.deepEqual(selectJobs(root, { limit: 10 }).map((j) => j.company), ["Iota"]);
+});
+
+test("scoringBacklog: every ranked job is judged, eligible, or skipped for a named reason; unscored ones are flagged as new", () => {
+  const root = ws();
+  const f = path.join(root, "data", "hunt-enrich.json");
+  const doc = JSON.parse(fs.readFileSync(f, "utf8"));
+  doc.jobs["https://a/1"].quick_score = null; // brand new: no quick score yet, still eligible
+  doc.jobs["https://x/10"] = job("Hidden", { excluded: "not full-time" });
+  fs.writeFileSync(f, JSON.stringify(doc));
+  const b = scoringBacklog(root);
+  assert.equal(b.judged, 1);
+  assert.equal(b.sonnet_eligible.count, 3); // Alpha, Delta, Iota (as selectJobs)
+  assert.equal(b.hidden_by_rules.count, 1);
+  assert.equal(b.no_quick_score_yet.count, 1);
+  assert.equal(b.no_quick_score_yet.jobs[0].company, "Alpha");
+  assert.equal(b.no_quick_score_yet.jobs[0].eligible, true);
+  assert.equal(b.skipped_on_purpose.level.count, 1); // Eps (Staff)
+  assert.equal(b.skipped_on_purpose.location.count, 2); // Gamma (tier 3 under the relocate bars), Theta
+  const skipped = Object.values(b.skipped_on_purpose).reduce((n, x) => n + x.count, 0);
+  assert.equal(b.judged + b.tracked + b.sonnet_eligible.count + skipped, b.jobs);
 });

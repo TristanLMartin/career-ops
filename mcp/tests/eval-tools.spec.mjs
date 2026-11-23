@@ -70,3 +70,14 @@ test("evaluate_jobs: a paused profile is refused; bad run ids are rejected", asy
   assert.equal(none.isError, true);
   assert.match(none.text, /no run/);
 });
+
+test("get_scoring_status: judged / eligible / skipped, with the read-me that no score is normal", async () => {
+  const r = await callTool(config, "get_scoring_status", {});
+  assert.equal(r.isError, false, r.text);
+  assert.match(r.value.read_me, /Not judged is normal/);
+  assert.equal(typeof r.value.judged, "number");
+  assert.equal(typeof r.value.sonnet_eligible.count, "number");
+  assert.equal(r.value.no_quick_score_yet.count, 0);
+  // Vandelay's quick 1 is skipped on purpose, with its reason.
+  assert.match(r.value.skipped_on_purpose.quick_1.why, /quick score 1/);
+});
