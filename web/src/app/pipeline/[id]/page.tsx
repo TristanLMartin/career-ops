@@ -11,6 +11,7 @@ import { readHuntEnrichment } from "@/lib/hunt-data";
 import { rankMap, stretchLabel } from "@/lib/hunt-rank-order.mjs";
 import { StretchBadge, WhyThisRank } from "@/components/hunt/rank-badges";
 import { JobRating } from "@/components/hunt/job-rating"; // hunt: your 1-5 rating
+import { StarButton } from "@/components/hunt/star-button"; // hunt: star the company (filter only)
 import type { HuntEnrichment } from "@/lib/hunt-types";
 import { findEnrichRow, payLine } from "@/lib/hunt-job-pay.mjs";
 
@@ -44,7 +45,7 @@ export default async function ReportPage({ params, searchParams }: {
   // hunt: Best overall rank (#N, the same number everywhere) and "Why this rank".
   const rowUrl = row ? Object.keys(enrichJobs).find((u) => enrichJobs[u] === row) ?? null : null;
   const rank = rowUrl ? rankMap(enrichJobs).get(rowUrl) ?? null : null;
-  const rankSlot = row ? { rank, why: <>{stretchLabel(row as HuntEnrichment) && <div className="mb-2 flex items-center gap-2 text-xs text-muted"><StretchBadge e={row as HuntEnrichment} /><span>{stretchLabel(row as HuntEnrichment)!.title}</span></div>}{rowUrl && <div className="mb-2"><JobRating url={rowUrl} rating={(row as HuntEnrichment).my_rating ?? null} note={(row as HuntEnrichment).my_rating_note ?? (row as HuntEnrichment).my_rating_said ?? null} /></div>}<WhyThisRank e={row as HuntEnrichment} rank={rank} /></> } : null;
+  const rankSlot = row ? { rank, why: <>{stretchLabel(row as HuntEnrichment) && <div className="mb-2 flex items-center gap-2 text-xs text-muted"><StretchBadge e={row as HuntEnrichment} /><span>{stretchLabel(row as HuntEnrichment)!.title}</span></div>}{rowUrl && <div className="mb-2 flex items-start gap-2"><StarButton company={(row as HuntEnrichment).company} /><JobRating url={rowUrl} rating={(row as HuntEnrichment).my_rating ?? null} note={(row as HuntEnrichment).my_rating_note ?? (row as HuntEnrichment).my_rating_said ?? null} /></div>}<WhyThisRank e={row as HuntEnrichment} rank={rank} /></> } : null;
   return (
     <ReportView
       id={id}

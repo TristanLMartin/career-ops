@@ -28,6 +28,8 @@ import { INBOX_SORT_STORAGE_KEY, writeInboxSort } from "@/lib/inbox-sort-pref.mj
 import { DEFAULT_HUNT_SORT, HUNT_SORT_STORAGE_KEY, orderByRank, readHuntSort, writeHuntSort } from "@/lib/hunt-sort-pref.mjs";
 import { rankValue, type HuntEnrichment } from "@/lib/hunt-types";
 import { fitValue, standsAlone } from "@/lib/hunt-rank-order.mjs";
+import { isStarred, starKeys } from "@/lib/hunt-stars.mjs"; // hunt: starred companies
+import { postStar } from "@/components/hunt/star-button";
 
 const SHORTLIST_KEY = "career-ops:shortlist";
 const HIDDEN_KEY = "career-ops:hidden";
@@ -71,6 +73,24 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
   const [locQ, setLocQ] = useState("");
   const [kw, setKw] = useState("");
   const [showAll, setShowAll] = useState(false);
+  // hunt: starred companies (a filter only, never a ranking boost), loaded from /api/profile/stars.
+  const [stars, setStars] = useState<string[]>([]);
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [starError, setStarError] = useState("");
+  useEffect(() => {
+    let live = true;
+    fetch("/api/profile/stars", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { companies: [] })).then((d: { companies?: string[] }) => { if (live) setStars(d.companies ?? []); }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
+  const starSet = useMemo(() => starKeys(stars), [stars]);
+  const toggleStar = async (company: string, next: boolean) => {
+    const before = stars;
+    setStarError("");
+    setStars((cur) => (next ? [...cur, company] : cur.filter((c) => !isStarred(starKeys([c]), company))));
+    const saved = await postStar(company, next);
+    if (saved) setStars(saved);
+    else { setStars(before); setStarError(`Couldn't ${next ? "star" : "unstar"} ${company}. Try again.`); }
+  };
   // Both start on the default so server and client render the same; the mount
   // effect loads this browser's saved default. Picking a sort only changes the
   // view; "Make default" is what saves it.
@@ -224,6 +244,7 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
       enriched.filter((e) => {
         if (hidden.includes(e.job.url)) return false;
         if (companyF && !matchesCompany(e.job, companyF)) return false;
+        if (starredOnly && !isStarred(starSet, e.job.company)) return false;
         if (within != null && (e.age == null || e.age > within)) return false;
         if (sources.size && (!e.source || !sources.has(e.source))) return false;
         if (seniorities.size && (!e.seniority || !seniorities.has(e.seniority))) return false;
@@ -231,7 +252,7 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
         if (kw.trim() && !`${e.job.company} ${e.job.role}`.toLowerCase().includes(kw.trim().toLowerCase())) return false;
         return true;
       }),
-    [enriched, hidden, companyF, within, sources, seniorities, locQ, kw],
+    [enriched, hidden, companyF, starredOnly, starSet, within, sources, seniorities, locQ, kw],
   );
 
   // Fit order lives in core/inbox-rank.mjs. This is the only sort.
@@ -254,7 +275,7 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
   const discoveryCount = useMemo(() => new Set(filtered.filter((e) => huntOf(e.job)?.origin === "discovery").map((e) => huntOf(e.job)?.group ?? e.job.url)).size, [filtered]);
   const groupCount = useMemo(() => new Set(filtered.map((e) => huntOf(e.job)?.group ?? e.job.url)).size, [filtered]);
 
-  const anyFacet = companyF != null || within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
+  const anyFacet = companyF != null || starredOnly || within != null || sources.size > 0 || seniorities.size > 0 || locQ.trim() !== "" || kw.trim() !== "";
   // Keep the batch cap with filters on too: filters sit under the list, so an
   // uncapped match set pushes what the filter did off screen.
   const capped = !showAll;
@@ -470,6 +491,7 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
   return (
     <div className={cn("mx-auto mt-4 max-w-3xl", shortlist.length > 0 && "pb-28 sm:pb-24")}>
       {writeError && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-400">{writeError}</p>}
+      {starError && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-400">{starError}</p>}
       {/* Keep recovery mounted when the last Skip refreshes to an empty inbox. */}
       <div hidden={inbox.length === 0}>
       {companyF && (
@@ -495,6 +517,11 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
                 {{ rank: "Best overall", fit: "Best fit", pay: "Highest pay", newest: "Newest" }[m]}
               </button>
             ))}
+            <span aria-hidden="true" className="text-border">|</span>
+            {/* hunt: Starred only (a filter; stars never change the ranking) */}
+            <button type="button" aria-pressed={starredOnly} onClick={() => setStarredOnly((v) => !v)} title={stars.length ? `Starred: ${stars.join(", ")}` : "Star companies with the star on a job"} className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 max-sm:min-h-[44px] max-sm:justify-center", starredOnly ? "border-amber-500/60 bg-amber-500/10 font-medium text-foreground" : "border-border text-faint hover:text-foreground")}>
+              <span aria-hidden="true">{starredOnly ? "\u2605" : "\u2606"}</span> Starred only
+            </button>
             <span aria-hidden="true" className="text-border">|</span>
             <button
               type="button"
@@ -553,6 +580,8 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
               similarOpen={expanded.has(huntOf(e.job)?.group ?? "")}
               onToggleSimilar={() => setExpanded((prev) => { const g = huntOf(e.job)?.group ?? ""; const next = new Set(prev); if (next.has(g)) next.delete(g); else next.add(g); return next; })}
               isSimilar={similarCount.get(e.job.url) === -1}
+              starred={isStarred(starSet, e.job.company)}
+              onToggleStar={toggleStar}
             />
           ))}
         </ul>

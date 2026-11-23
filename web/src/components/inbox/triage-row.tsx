@@ -14,6 +14,7 @@ import { inboxScoreTarget } from "@/lib/inbox-score-target.mjs";
 // hunt: ranking badges from data/hunt-enrich.json
 import { CardMeta, RankBadges } from "@/components/hunt/rank-badges";
 import { ReferralIconLink } from "@/components/hunt/referral-links";
+import { StarButton } from "@/components/hunt/star-button"; // hunt: starred companies (filter only)
 import type { HuntEnrichment } from "@/lib/hunt-types";
 
 // hunt: where a row click goes (report, else the job's detail page): ./triage-row-target.mjs
@@ -50,6 +51,8 @@ export function TriageRow({
   similarOpen = false,
   onToggleSimilar,
   isSimilar = false,
+  starred,
+  onToggleStar,
 }: {
   index: number;
   cursor: boolean;
@@ -67,6 +70,8 @@ export function TriageRow({
   similarOpen?: boolean;
   onToggleSimilar?: () => void;
   isSimilar?: boolean;
+  starred?: boolean;
+  onToggleStar?: (company: string, next: boolean) => void;
 }) {
   const ago = agoLabel(age);
   const target = inboxScoreTarget(scored);
@@ -108,6 +113,7 @@ export function TriageRow({
       />
 
       <CompanyLogo name={job.company} size={20} />
+      {onToggleStar && <StarButton company={job.company} starred={starred ?? false} onToggle={onToggleStar} />}
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm">
