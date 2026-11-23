@@ -90,3 +90,8 @@ test("at most per_company per company, and pickCandidates routes to the profile 
   assert.deepEqual(pickCandidates(jobs, { count: 10, picker: { ...RECRUITER, per_company: 3 } }).map((p) => p.url), ["a1", "a2", "a3", "b1"]);
   assert.deepEqual(pickCandidates(jobs, { count: 0, picker: RECRUITER }), []);
 });
+
+test("the daily picker skips jobs a profile excludes (not full-time) and URLs it is told to skip", () => {
+  const jobs = { ok: job({ composite: 90, company: "A" }), contract: job({ composite: 95, company: "B", excluded: "not full-time" }), gated: job({ composite: 99, company: "C" }) };
+  assert.deepEqual(pickCandidates(jobs, { count: 10, exclude: new Set(["gated"]) }).map((p) => p.url), ["ok"]);
+});

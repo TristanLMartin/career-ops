@@ -98,3 +98,13 @@ test("runStatus: a stopped run never shows results a later run produced", () => 
   const s = runStatus(root, "ev-old");
   assert.deepEqual(s.results.map((r) => r.company), ["Alpha"]);
 });
+
+test("selectJobs skips not-full-time jobs a profile excludes, and jobs an earlier run stopped at a gate", () => {
+  const root = ws();
+  const f = path.join(root, "data", "hunt-enrich.json");
+  const doc = JSON.parse(fs.readFileSync(f, "utf8"));
+  doc.jobs["https://a/1"].excluded = "not full-time";
+  fs.writeFileSync(f, JSON.stringify(doc));
+  fs.writeFileSync(path.join(root, "data", "hunt-usage.tsv"), "date\tmodel\tstatus\tsecs\ttokens\tcost_usd\treport\tcompany\trole\turl\n2026-11-22T10:00:00Z\tclaude-sonnet-5-5 (reeval lite)\terror: gated: dealbreaker: floor\t1\t1\t0.05\t\tDelta\tD\thttps://d/4\n");
+  assert.deepEqual(selectJobs(root, { limit: 10 }).map((j) => j.company), ["Iota"]);
+});

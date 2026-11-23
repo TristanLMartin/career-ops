@@ -35,6 +35,7 @@ import { trueRank } from "../web/src/lib/hunt-home-v2.mjs";
 import { applySignals } from "../web/src/lib/hunt-job-signals.mjs";
 import { filterJob } from "./hunt-job-filters.mjs";
 import { quickFirst, worthJudging } from "../lib/hunt-judge-order.mjs";
+import { gatedUrls } from "../lib/hunt-gate-history.mjs";
 
 const CODE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Typical cost per job, measured on real batches (Sonnet lite ~$0.125, Opus full ~$1.85); estimates only.
@@ -70,10 +71,12 @@ export function selectJobs(root, { limit = 50, company = null, maxRank = null } 
   const jobs = applySignals(structuredClone(doc.jobs ?? {}), { ratings: readJson(path.join(root, "data", "hunt-ratings.json"), {}), liveness: readJson(path.join(root, "data", "hunt-liveness.json"), {}) });
   const tracked = trackedUrls(root);
   const prev = readJson(path.join(root, "data", "hunt-prev-fit.json"), {});
+  const gated = gatedUrls(root); // stopped at a gate before (lib/hunt-gate-history.mjs)
   const co = company ? String(company).toLowerCase() : null;
   return trueRank(jobs).filter((e) => {
     if (tracked.has(e.url) || e.status || e.report || e.fit != null || prev[e.url]?.reeval_ok) return false;
     if (!worthJudging(e)) return false;
+    if (e.excluded || gated.has(e.url)) return false;
     if (e.closed || e.belowFloor) return false;
     if (!filterJob(e, target).ok) return false;
     if (co && !String(e.company ?? "").toLowerCase().includes(co)) return false;

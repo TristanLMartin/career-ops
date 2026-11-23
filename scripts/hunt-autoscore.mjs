@@ -23,6 +23,7 @@ import { loadYaml } from "../lib/yaml-document.mjs";
 import { filterJob } from "./hunt-job-filters.mjs";
 import { exitOnHelp, requireSpendConsent } from "../lib/cli-guard.mjs";
 import { quickFirst, worthJudging } from "../lib/hunt-judge-order.mjs";
+import { gatedUrls } from "../lib/hunt-gate-history.mjs";
 // Each profile's web instance has its own port (CAREER_OPS_WEB_PORT, default 3000), and its
 // Sonnet retry server sits 8 above it.
 const WEB_PORT = Number(process.env.CAREER_OPS_WEB_PORT) || 3000;
@@ -63,7 +64,7 @@ export function pickWithProfile(enrichJobs, cfg, { count = 5, perCompany = 2, ex
   const per = new Map();
   const out = [];
   const ranked = Object.entries(enrichJobs)
-    .filter(([url, e]) => !exclude.has(url) && e.source === "inbox" && e.fit == null && typeof e.composite === "number" && e.groupLeader !== false && worthJudging(e))
+    .filter(([url, e]) => !exclude.has(url) && !e.excluded && e.source === "inbox" && e.fit == null && typeof e.composite === "number" && e.groupLeader !== false && worthJudging(e))
     .map(([url, e]) => {
       const title = String(e.displayRole ?? e.role ?? "");
       const contract = !!e.contract || CONTRACT_TITLE.test(title);
@@ -94,7 +95,7 @@ export function pickCandidates(enrichJobs, { count = 5, perCompany = 2, exclude 
   const per = new Map();
   const out = [];
   const ranked = Object.entries(enrichJobs)
-    .filter(([url, e]) => !exclude.has(url) && e.source === "inbox" && e.fit == null && typeof e.composite === "number" && worthJudging(e))
+    .filter(([url, e]) => !exclude.has(url) && !e.excluded && e.source === "inbox" && e.fit == null && typeof e.composite === "number" && worthJudging(e))
     .filter(([, e]) => filterJob(e, target).ok)
     // Highest Haiku quick score first, then composite (lib/hunt-judge-order.mjs).
     .sort(quickFirst((a, b) => b[1].composite - a[1].composite, (x) => x[1]));
@@ -250,7 +251,7 @@ export async function autoscore({ root = getCareerOpsRoot(), count, perCompany =
   const enrich = JSON.parse(fs.readFileSync(path.join(root, "data", "hunt-enrich.json"), "utf8"));
   const picks = urls?.length
     ? urls.map((url) => { const e = enrich.jobs[url] ?? {}; return { url, company: e.company ?? "", role: e.displayRole ?? e.role ?? "", composite: e.composite ?? null, level: e.level?.label }; })
-    : pickCandidates(enrich.jobs, { count: n, perCompany, picker: cfg.auto_score_picker ?? null, target: cfg.target });
+    : pickCandidates(enrich.jobs, { count: n, perCompany, picker: cfg.auto_score_picker ?? null, target: cfg.target, exclude: gatedUrls(root) });
   if (dryRun || picks.length === 0) return { picks, results: [] };
   const results = [];
   const retry = [];
