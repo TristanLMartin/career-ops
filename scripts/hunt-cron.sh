@@ -11,6 +11,7 @@
 #   scripts/hunt-cron.sh autoscore # score the day's top unscored roles (auto_score_per_day, Haiku; Sonnet retry),
 #                                     # then re-check that the top 50 + every >180-day posting is still open (zero tokens)
 #   scripts/hunt-cron.sh comp-refresh # quarterly: DOL H-1B LCA senior base per company -> data/comp-lca-summary.json
+#   scripts/hunt-cron.sh levels    # monthly: Levels.fyi per-level TC for pipeline companies (official MCP) -> data/comp-levels.json
 #   scripts/hunt-cron.sh ui        # start the web UI (CAREER_OPS_WEB_PORT, default 3000) if it isn't running
 #
 # Machine settings (port, which hosts may reach the UI) go in config/cron.env; see the .example.
@@ -100,6 +101,12 @@ case "${1:-}" in
     node scripts/hunt-liveness.mjs >> "$LOG" 2>&1
     echo "$(stamp) autoscore: done" >> "$LOG"
     ;;
+  levels)
+    echo "$(stamp) levels: start" >> "$LOG"
+    node scripts/hunt-levels-refresh.mjs >> "$LOG" 2>&1
+    node scripts/hunt-enrich.mjs --no-fetch --quiet >> "$LOG" 2>&1
+    echo "$(stamp) levels: done" >> "$LOG"
+    ;;
   comp-refresh)
     echo "$(stamp) comp-refresh: start" >> "$LOG"
     node scripts/hunt-comp-validate.mjs >> "$LOG" 2>&1
@@ -115,5 +122,5 @@ case "${1:-}" in
     ( cd web && CAREER_OPS_WEB_ALLOWED_HOSTS="$ALLOWED_HOSTS" \
       setsid nohup npm start -- -p "$WEB_PORT" >> "$UI_LOG" 2>&1 < /dev/null & )
     ;;
-  *) echo "usage: $0 scan|messages|discover|boards-search|wide-vc|wide-weekly|targets|h2h|autoscore|comp-refresh|ui" >&2; exit 2 ;;
+  *) echo "usage: $0 scan|messages|discover|boards-search|wide-vc|wide-weekly|targets|h2h|autoscore|comp-refresh|levels|ui" >&2; exit 2 ;;
 esac
