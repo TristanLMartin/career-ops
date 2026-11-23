@@ -81,12 +81,14 @@ claude mcp add --transport http career-ops http://127.0.0.1:8765/mcp --header "A
 
 ## Tools
 
+Tool text shows tracker rows as "ID N" and times in `CAREER_OPS_TZ` (an IANA zone such as `America/Chicago`; default the system zone).
+
 Every tool takes an optional `profile` (a profile id from your config; default: the first).
 
 | Tool | What it does | Write path |
 |---|---|---|
 | `search_jobs(query?, company?, status?, min_quick_score?, location?, sort, limit≤50, include_duplicates?)` | Pipeline search; one row per dedupe group. Sort: `true_rank`, `composite`, `quick_score`, `pay`, `newest` | read |
-| `get_job(id)` | Full detail: pay band, TC estimate, scores/ranks, evaluation summary, tracker entry, dedupe group. `id` = search id (`j…`), URL, or tracker number | read |
+| `get_job(id)` | Full detail: pay band, TC estimate, scores/ranks, evaluation summary, tracker entry, dedupe group. `id` = search id (`j…`), URL, or tracker number (`ID 12` or `12`) | read |
 | `list_tracker(status?)` | Tracker rows past Evaluated: status, applied, updated, next step + date, interview dates, notes | read |
 | `update_tracker(id, status?, next_step?, next_date?, interview_date?, append_note?)` | Status validated against `templates/states.yml`; next step replaces the row's `Next: …` note; interview date and notes are appended, dated | `POST /api/status` |
 | `list_followups(include_done?)` | Follow-ups needing action (one per opportunity) | `GET /api/profile/followups` |

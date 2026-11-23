@@ -5,6 +5,8 @@ import path from "node:path";
 import { makeWorkspace, startFakeDashboard, callTool, HOME_FIXTURE } from "./helpers.mjs";
 import { jobId } from "../src/data.mjs";
 
+process.env.CAREER_OPS_TZ = "America/New_York"; // tool text tells times in this zone
+
 let ws, dash, config;
 before(async () => { ws = makeWorkspace(); dash = await startFakeDashboard(ws.root); config = ws.configFor(dash.port); });
 after(async () => { await dash.close(); ws.cleanup(); });
@@ -61,6 +63,7 @@ test("get_job: by id, by URL and by tracker number", async () => {
   assert.equal(byUrl.value.dedupe_group.members[0].title, "Staff Platform Engineer (Infra)");
   const byN = await callTool(config, "get_job", { id: "#2" });
   assert.equal(byN.value.company, "Globex");
+  for (const id of ["ID 2", "id:2"]) assert.equal((await callTool(config, "get_job", { id })).value?.company, "Globex", id);
   const missing = await callTool(config, "get_job", { id: "jnothere" });
   assert.equal(missing.isError, true);
   assert.match(missing.text, /No job/);
@@ -138,6 +141,10 @@ test("list_followups and mark_followup round-trip through /api/profile/marks", a
   assert.ok(value.needing_action >= 1, JSON.stringify(value));
   const first = value.followups[0];
   assert.ok(first.id && first.title);
+  for (const f of value.followups) {
+    for (const t of f.tracker ?? []) assert.match(t, /^ID \d+ /);
+    if (f.latest?.date) assert.match(f.latest.date, / EST$/);
+  }
   const r = await callTool(config, "mark_followup", { id: first.id, mark: "ignored" });
   assert.equal(r.isError, false, r.text);
   assert.deepEqual(dash.calls.at(-1).body.mark, "wont");
@@ -186,6 +193,7 @@ test("add_job_by_url: new, matched and need_details", async () => {
 });
 
 test("get_summary: needs / in flight / new come from the dashboard's /api/profile/home", async () => {
+  fs.writeFileSync(path.join(ws.root, "data", "scan-runs.tsv"), "timestamp\tstatus\n2026-11-22T17:15:12.328Z\tcompleted\n");
   const before = dash.calls.length;
   const { text, isError } = await callTool(config, "get_summary", {});
   assert.equal(isError, false);
@@ -193,11 +201,12 @@ test("get_summary: needs / in flight / new come from the dashboard's /api/profil
   assert.deepEqual(homeCalls.map((c) => `${c.method} ${c.url}`), ["GET /api/profile/home"]);
   assert.match(text, /^Needs you \(2\):\n- Acme Robotics · Senior Backend Engineer — Interview with no next step set\n- Sam Sample · Globex — You owe a reply\n/);
   assert.match(text, /\nIn flight \(2\): Interview 1, Applied 1\n/);
-  assert.match(text, /- #1 Acme Robotics · Senior Backend Engineer \(Interview; next: Acme onsite \(via Paraform\) Tue 11\/24 1:00 PM PT\)/);
-  assert.match(text, /- #2 Globex · Platform Engineer \(Applied\)\n/);
+  assert.match(text, /- ID 1 Acme Robotics · Senior Backend Engineer \(Interview; next: Acme onsite \(via Paraform\) Tue 11\/24 1:00 PM PT\)/);
+  assert.match(text, /- ID 2 Globex · Platform Engineer \(Applied\)\n/);
   assert.match(text, /Today's study: /); // still read locally
-  assert.match(text, new RegExp(`New since last look \\(1\\):\\n- #3 Hooli · Staff Engineer \\[${jobId("https://jobs.example.com/hooli/3")}\\]`));
-  assert.match(text, /· 1 in inbox · \$0\.00 AI usage, last 7 days/);
+  assert.match(text, new RegExp(`New since last look \\(1\\):\\n- rank 3 Hooli · Staff Engineer \\[${jobId("https://jobs.example.com/hooli/3")}\\]`));
+  assert.match(text, /Last scan Sun, Nov 22, 12:15 PM EST · 1 in inbox · \$0\.00 AI usage, last 7 days/);
+  assert.doesNotMatch(text, /#\d/);
   assert.ok(text.split("\n").length <= 30);
 });
 

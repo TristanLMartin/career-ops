@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ToolError, resolveProfile } from "./config.mjs";
 import { ProfileData, jobId } from "./data.mjs";
 import { dashboardPost, dashboardGetJson } from "./dashboard-client.mjs";
+import { localWhen, trackerLabel, parseTrackerRef } from "./format.mjs";
 
 const k = (n) => `$${Math.round(n / 1000)}k`;
 const clip = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -61,8 +62,8 @@ function findJob(idx, ref) {
   const s = String(ref ?? "").trim();
   if (idx.byId.has(s)) return idx.byId.get(s);
   if (idx.byUrl.has(s)) return idx.byUrl.get(s);
-  const n = s.replace(/^#|^tracker:/i, "");
-  if (/^\d+$/.test(n) && idx.appByN.has(n)) {
+  const n = parseTrackerRef(s);
+  if (n && idx.appByN.has(n)) {
     const app = idx.appByN.get(n);
     const url = idx.M.tracker.cellUrl(app.url);
     return (url && idx.byUrl.get(url)) ?? idx.rows.find((r) => String(r.e.report?.tracker) === n) ?? { id: null, url, e: null, app, status: app.status.trim() };
@@ -148,7 +149,7 @@ export const TOOLS = {
   },
 
   get_job: {
-    description: "Full detail for one job: pay band, TC estimate with its source and confidence, scores and ranks, evaluation summary, tracker entry, and the other postings in its dedupe group. id is a search_jobs id, a posting URL, or a tracker number like \"12\".",
+    description: "Full detail for one job: pay band, TC estimate with its source and confidence, scores and ranks, evaluation summary, tracker entry, and the other postings in its dedupe group. id is a search_jobs id, a posting URL, or a tracker number like \"ID 12\" (\"12\" also works).",
     input: { profile: profileArg, id: z.string().min(1).max(2000) },
     async run(data, a) {
       const idx = await jobIndex(data);
@@ -192,7 +193,7 @@ export const TOOLS = {
   },
 
   update_tracker: {
-    description: "Update one tracker row (id = tracker number, or a job id that is in the tracker). status must be a dashboard status (Applied, Responded, Assessment, Interview, Offer, Rejected, Discarded, ...). next_step / next_date set the row's \"Next:\" note (replacing the old one); interview_date (YYYY-MM-DD, optional HH:MM) and append_note add timestamped notes. Never deletes or overwrites other notes.",
+    description: "Update one tracker row (id = tracker number like \"ID 12\" or \"12\", or a job id that is in the tracker). status must be a dashboard status (Applied, Responded, Assessment, Interview, Offer, Rejected, Discarded, ...). next_step / next_date set the row's \"Next:\" note (replacing the old one); interview_date (YYYY-MM-DD, optional HH:MM) and append_note add timestamped notes. Never deletes or overwrites other notes.",
     input: {
       profile: profileArg,
       id: z.string().min(1).max(2000),
@@ -268,8 +269,8 @@ export const TOOLS = {
             id: o.key, title: o.title, company: o.company, detail: o.line2, when: o.whenLabel || o.when, state: o.state,
             other: o.other || null, mark: o.mark ? (o.mark.mark === "wont" ? "ignored" : o.mark.mark) : null,
             people: o.people.map((p) => (p.role ? `${p.name} (${p.role})` : p.name)),
-            latest: t ? compact({ from: t.name, date: t.date, snippet: clip(t.snippet, 160), waiting_on: t.lastFromMe ? "them" : "you" }) : null,
-            tracker: o.rows.map((r) => `#${r.n} ${r.status}`),
+            latest: t ? compact({ from: t.name, date: localWhen(t.date), snippet: clip(t.snippet, 160), waiting_on: t.lastFromMe ? "them" : "you" }) : null,
+            tracker: o.rows.map((r) => `${trackerLabel(r.n)} ${r.status}`),
           });
         }),
       };
@@ -358,18 +359,18 @@ export const TOOLS = {
       const counts = {};
       for (const r of flying) counts[r.status] = (counts[r.status] ?? 0) + 1;
       lines.push(`In flight (${flying.length})${flying.length ? `: ${Object.entries(counts).map(([st, c]) => `${st} ${c}`).join(", ")}` : ""}`);
-      for (const r of flying.slice(0, 6)) lines.push(`- #${r.n} ${clip(`${r.company} · ${r.role}`, 80)} (${r.status}${r.next ? `; next: ${clip(r.next, 70)}` : ""})`);
+      for (const r of flying.slice(0, 6)) lines.push(`- ${trackerLabel(r.n)} ${clip(`${r.company} · ${r.role}`, 80)} (${r.status}${r.next ? `; next: ${clip(r.next, 70)}` : ""})`);
       if (s.today) {
         const done = s.today.items.filter((i) => s.state.ticks[i.id]).length;
         const next = s.today.items.find((i) => !s.state.ticks[i.id]);
         lines.push(`Today's study: ${s.today.title} — ${done}/${s.today.items.length} done${next ? `; next: ${clip(next.text, 70)}` : ""} (day ${s.progress.done + 1} of ${s.progress.total})`);
       } else lines.push(s.days.length ? "Today's study: plan complete" : "Today's study: no plan yet");
       lines.push(`New since last look (${fresh.length})${fresh.length ? ":" : ""}`);
-      for (const e of fresh.slice(0, 5)) lines.push(`- #${e.rank} ${clip(`${e.company} · ${e.role}`, 80)} [${jobId(e.url)}]`);
+      for (const e of fresh.slice(0, 5)) lines.push(`- rank ${e.rank} ${clip(`${e.company} · ${e.role}`, 80)} [${jobId(e.url)}]`);
       const scan = await data.lastScanAt();
       const inbox = await data.pendingInboxCount();
       const cost = await data.weekCost();
-      lines.push(`Last scan ${scan ?? "never"} · ${inbox.toLocaleString("en-US")} in inbox · $${cost.toFixed(2)} AI usage, last 7 days`);
+      lines.push(`Last scan ${scan ? localWhen(scan) : "never"} · ${inbox.toLocaleString("en-US")} in inbox · $${cost.toFixed(2)} AI usage, last 7 days`);
       return lines.join("\n");
     },
   },
