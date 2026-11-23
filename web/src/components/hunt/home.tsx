@@ -143,7 +143,7 @@ export function HuntHome() {
       </div>
 
       <p className="px-1 text-[11px] text-faint" suppressHydrationWarning>
-        {scanAt ? `Last scan ${shortWhen(scanAt)}` : "No scan yet"} · {inboxCount.toLocaleString("en-US")} in inbox · <Link href="/jobs" className="hover:text-brand-text hover:underline">${cost.toFixed(2)} this week</Link>
+        {scanAt ? `Last scan ${shortWhen(scanAt)}` : "No scan yet"} · {inboxCount.toLocaleString("en-US")} in inbox · <Link href="/jobs" className="hover:text-brand-text hover:underline">${cost.toFixed(2)} AI use, last 7 days</Link>
       </p>
       {spot && (
         <p className={cn("px-1 text-[11px]", spot.warn ? "text-amber-800 dark:text-amber-400" : "text-faint")}>
