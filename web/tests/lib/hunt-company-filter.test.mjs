@@ -6,7 +6,7 @@ import { atsBoard, companyFilter, companyHref, companyKey, matchesCompany } from
 test("company keys ignore case, punctuation, legal suffixes and Industries/Technologies/AI tails", () => {
   assert.equal(companyKey("Anduril Industries, Inc."), companyKey("Andurilindustries"));
   assert.equal(companyKey("Snorkel AI"), companyKey("Snorkelai"));
-  assert.equal(companyKey("Stoke Space Technologies"), companyKey("Stoke Space"));
+  assert.equal(companyKey("Acme Rockets Technologies"), companyKey("Acme Rockets"));
   assert.equal(companyKey("OpenAI"), "openai");
   assert.notEqual(companyKey("Stripe"), companyKey("Ramp"));
 });
@@ -20,9 +20,9 @@ test("ATS boards from portal careers URLs and posting URLs", () => {
 });
 
 test("a job matches by name or by the portal entry's board (aliases on the same board)", () => {
-  const f = companyFilter("Stoke Space Technologies", ["greenhouse:stokespacetechnologies"]);
-  assert.ok(matchesCompany({ company: "Stoke Space", url: "https://x/1" }, f));
-  assert.ok(matchesCompany({ company: "Stoke", url: "https://job-boards.greenhouse.io/stokespacetechnologies/jobs/1" }, f));
+  const f = companyFilter("Acme Rockets Technologies", ["greenhouse:acmerocketstechnologies"]);
+  assert.ok(matchesCompany({ company: "Acme Rockets", url: "https://x/1" }, f));
+  assert.ok(matchesCompany({ company: "Acme", url: "https://job-boards.greenhouse.io/acmerocketstechnologies/jobs/1" }, f));
   assert.ok(!matchesCompany({ company: "Relativity Space", url: "https://job-boards.greenhouse.io/relativity/jobs/1" }, f));
-  assert.equal(companyHref("Stoke Space", ["greenhouse:stoke"]), "/pipeline?company=Stoke+Space&board=greenhouse%3Astoke");
+  assert.equal(companyHref("Acme Rockets", ["greenhouse:acme"]), "/pipeline?company=Acme+Rockets&board=greenhouse%3Aacme");
 });

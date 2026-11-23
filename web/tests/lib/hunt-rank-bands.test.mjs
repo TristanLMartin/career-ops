@@ -84,7 +84,7 @@ test("a Staff role the report says you meet keeps its band (still labeled Stretc
 
 test("favorite companies (rankBoost) get no ranking boost (stars are a filter)", () => {
   const jobs = {
-    boosted: job({ company: "Stoke Space", fit: 4.0, rankBoost: true, tc_est: { usd: 150000 } }),
+    boosted: job({ company: "Acme Rockets", fit: 4.0, rankBoost: true, tc_est: { usd: 150000 } }),
     apply: job({ company: "A", fit: 4.4, tc_est: { usd: 600000 } }),
     strong: job({ company: "S", fit: 4.5, tc_est: { usd: 150000 } }),
   };

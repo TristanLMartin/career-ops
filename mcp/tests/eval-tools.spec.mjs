@@ -1,6 +1,6 @@
 // evaluate_jobs / get_eval_run / list_eval_runs against the fixture, through career-ops' real
 // eval hook. CAREER_OPS_EVAL_DRY_SPAWN=1 records the run without starting a worker, so nothing
-// here spends; CAREER_OPS_EVAL_LOCK keeps the test off og's real one-run-at-a-time lock.
+// here spends; CAREER_OPS_EVAL_LOCK keeps the test off the machine's real one-run-at-a-time lock.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

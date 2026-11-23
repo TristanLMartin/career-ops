@@ -20,7 +20,7 @@ import { staleChip } from "./hunt-job-signals.mjs";
 import { SCORE_BANDS, bandForScore } from "./core/score-action.mjs";
 
 const CLOSED = new Set(["Rejected", "Discarded", "SKIP", "Hired"]);
-const TIER_NAMES = { 1: "Seattle", 2: "remote", 3: "NYC/Chicago", 4: "other places", 5: "remote" };
+const TIER_NAMES = { 1: "home area", 2: "remote", 3: "NYC/Chicago", 4: "other places", 5: "remote" };
 
 /** What the web needs from config/ranking.yml for the sorts and the caption. */
 export function rankSettings(cfg = {}) {
@@ -28,7 +28,7 @@ export function rankSettings(cfg = {}) {
   return { payBasis: cfg?.pay_basis === "tc" ? "tc" : "base", locationScores: loc };
 }
 
-/** "Best overall: jobs compared head-to-head on ... (Seattle/remote first)", for this profile. */
+/** "Best overall: jobs compared head-to-head on ... (home area/remote first)", for this profile. */
 export function rankCaption(settings, { tournament = true } = {}) {
   const top = Math.max(...Object.values(settings.locationScores));
   const names = [...new Set(Object.entries(settings.locationScores).filter(([, v]) => v >= top - 5).map(([k]) => TIER_NAMES[k]).filter(Boolean))];

@@ -81,5 +81,5 @@ test("the card line: fit or quick, short pay, place; one warning chip at most", 
 
 test("the caption: your ratings, then the 1-5 score, then pay and location (preferred places named)", () => {
   const t = rankCaption(rankSettings({ location_scores: { 1: 100, 2: 100, 3: 50, 4: 20, 5: 70 } }));
-  assert.match(t, /^Best overall: your ratings first, then the 1-5 score \(Sonnet's decimal once judged\), then pay and location \(Seattle\/remote first\)/);
+  assert.match(t, /^Best overall: your ratings first, then the 1-5 score \(Sonnet's decimal once judged\), then pay and location \(home area\/remote first\)/);
 });
