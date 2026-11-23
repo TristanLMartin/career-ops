@@ -3,11 +3,11 @@
  * the Map and job pages, whatever sort is active. Pure (no fs): computed on read from
  * data/hunt-enrich.json, so it always reflects the latest evaluations and inserts.
  *
- * Order (2026-11-22, see overallTuple): your own rating first (4-5 on top, 1-2 at the bottom),
- * then the career-ops fit band (upstream's Strong apply / Apply / Maybe / Skip; favorite and
- * stretch companies +half a band; a Staff+ title -1 band unless its report says you meet the
- * level or you rated it yourself), then TC band, location and
- * freshness within a band; unevaluated jobs follow by quick score, then pay. The Sonnet
+ * Order (see overallTuple): your own rating first (4-5 on top, 1-2 at the bottom), then the
+ * job's one 1-5 score (the quick score, replaced by the judged decimal) in upstream's bands
+ * (Strong apply / Apply / Maybe / Skip; a Staff+ title -1 band and -1 point unless its report
+ * says you meet the level or you rated it yourself), then the exact score, then TC band,
+ * location and freshness for exact ties. The Sonnet
  * head-to-head is only a late tie-break. At most 2 jobs per company in the top 20 and 4 in the
  * top 50 (never pushing down a job you rated 4+).
  * Posting age never demotes a job: closed jobs (data/hunt-liveness.json, scripts/hunt-liveness.mjs)
@@ -136,7 +136,7 @@ export function scoreOf(e) {
  * The Best overall order as a tuple, compared left to right, higher first:
  *   1. your rating tier: 4-5 above everything (5 before 4), 1-2 below everything, 3 or unrated neutral
  *   2. the score band of the job's one 1-5 score (scoreOf: quick score, or the judged decimal):
- *      favorites +half a band, Staff+ below the bar -1 band (tierUnits)
+ *      Staff+ below the bar -1 band (tierUnits); favorites/stars do not count
  *   3. the exact score (4.3 above 4.0; a quick 4 equals a judged 4.0; Staff below the bar -1)
  *   4. then TC band, location tier, fresher, head-to-head place, exact pay
  * Judged and unjudged jobs share one scale: an unjudged 5 ranks above a judged 4.3.
