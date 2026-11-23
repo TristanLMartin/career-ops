@@ -22,6 +22,7 @@ import { loadYaml } from "../lib/yaml-document.mjs";
 
 import { filterJob } from "./hunt-job-filters.mjs";
 import { exitOnHelp, requireSpendConsent } from "../lib/cli-guard.mjs";
+import { quickFirst, worthJudging } from "../lib/hunt-judge-order.mjs";
 // Each profile's web instance has its own port (CAREER_OPS_WEB_PORT, default 3000), and its
 // Sonnet retry server sits 8 above it.
 const WEB_PORT = Number(process.env.CAREER_OPS_WEB_PORT) || 3000;
@@ -62,7 +63,7 @@ export function pickWithProfile(enrichJobs, cfg, { count = 5, perCompany = 2, ex
   const per = new Map();
   const out = [];
   const ranked = Object.entries(enrichJobs)
-    .filter(([url, e]) => !exclude.has(url) && e.source === "inbox" && e.fit == null && typeof e.composite === "number" && e.groupLeader !== false)
+    .filter(([url, e]) => !exclude.has(url) && e.source === "inbox" && e.fit == null && typeof e.composite === "number" && e.groupLeader !== false && worthJudging(e))
     .map(([url, e]) => {
       const title = String(e.displayRole ?? e.role ?? "");
       const contract = !!e.contract || CONTRACT_TITLE.test(title);
@@ -74,7 +75,7 @@ export function pickWithProfile(enrichJobs, cfg, { count = 5, perCompany = 2, ex
       const off = (offTitle && offTitle.test(title)) || (offCompany && offCompany.test(`${e.company ?? ""} ${title}`));
       return !off || e.quick_score === unless;
     })
-    .sort((a, b) => b.rank - a.rank);
+    .sort(quickFirst((a, b) => b.rank - a.rank, (x) => x.e));
   for (const { url, e, title, contract, rank } of ranked) {
     const n = per.get(e.company) ?? 0;
     if (n >= perCompany) continue;
@@ -93,9 +94,10 @@ export function pickCandidates(enrichJobs, { count = 5, perCompany = 2, exclude 
   const per = new Map();
   const out = [];
   const ranked = Object.entries(enrichJobs)
-    .filter(([url, e]) => !exclude.has(url) && e.source === "inbox" && e.fit == null && typeof e.composite === "number")
+    .filter(([url, e]) => !exclude.has(url) && e.source === "inbox" && e.fit == null && typeof e.composite === "number" && worthJudging(e))
     .filter(([, e]) => filterJob(e, target).ok)
-    .sort((a, b) => b[1].composite - a[1].composite);
+    // Highest Haiku quick score first, then composite (lib/hunt-judge-order.mjs).
+    .sort(quickFirst((a, b) => b[1].composite - a[1].composite, (x) => x[1]));
   for (const [url, e] of ranked) {
     const n = per.get(e.company) ?? 0;
     if (n >= perCompany) continue;
