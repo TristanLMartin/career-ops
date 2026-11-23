@@ -115,12 +115,13 @@ export function stretchLabel(e) {
 }
 
 /**
- * The fit tier in half-tier units: a favorite/stretch company (`rankBoost`, stamped by
- * scripts/hunt-enrich.mjs from config/profile.yml) gets +1 (half a tier); a Staff+ title the
- * report says is above your level drops a full tier (-2, levelDrop). Posting age does not count.
+ * The score tier in half-tier units: a Staff+ title the report says is above your level drops a
+ * full tier (-2, levelDrop). Posting age does not count. Favorite / starred companies do not count
+ * either (stars are a filter, not a boost); `rankBoost` stays on the enrich
+ * row only for scripts/hunt-job-filters.mjs.
  */
 export function tierUnits(e) {
-  return fitTier(scoreOf(e)) * 2 + (e.rankBoost ? 1 : 0) - (levelDrop(e) ? 2 : 0);
+  return fitTier(scoreOf(e)) * 2 - (levelDrop(e) ? 2 : 0);
 }
 
 /**

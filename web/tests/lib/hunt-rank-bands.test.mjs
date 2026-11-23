@@ -82,13 +82,13 @@ test("a Staff role the report says you meet keeps its band (still labeled Stretc
   assert.deepEqual(order(jobs), ["meets", "senior"]);
 });
 
-test("favorite/stretch companies (rankBoost) get half a band: above their band, below the next", () => {
+test("favorite companies (rankBoost) get no ranking boost (stars are a filter)", () => {
   const jobs = {
     boosted: job({ company: "Stoke Space", fit: 4.0, rankBoost: true, tc_est: { usd: 150000 } }),
     apply: job({ company: "A", fit: 4.4, tc_est: { usd: 600000 } }),
     strong: job({ company: "S", fit: 4.5, tc_est: { usd: 150000 } }),
   };
-  assert.deepEqual(order(jobs), ["strong", "boosted", "apply"]);
+  assert.deepEqual(order(jobs), ["strong", "apply", "boosted"]);
 });
 
 test("company cap: at most 2 per company in the top 20 and 4 in the top 50; a 4+ rating is never pushed down", () => {
