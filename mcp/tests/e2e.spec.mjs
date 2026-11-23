@@ -35,9 +35,9 @@ const call = async (name, args = {}) => {
   try { return { r, v: JSON.parse(text) }; } catch { return { r, v: text }; }
 };
 
-test("lists exactly the thirteen tools, all with descriptions and a profile arg", async () => {
+test("lists exactly the twenty-one tools, all with descriptions and a profile arg", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["add_job_by_url", "complete_study_task", "evaluate_jobs", "get_eval_run", "get_job", "get_study_today", "get_summary", "list_eval_runs", "list_followups", "list_tracker", "mark_followup", "search_jobs", "update_tracker"].sort());
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["add_job_by_url", "complete_study_task", "evaluate_jobs", "get_eval_run", "get_job", "get_study_today", "get_summary", "list_eval_runs", "list_followups", "list_tracker", "mark_followup", "search_jobs", "update_tracker", "get_study_plan", "add_study_task", "update_study_task", "archive_study_task", "unarchive_study_task", "add_study_day", "update_study_day", "add_study_cards"].sort());
   for (const t of tools) {
     assert.ok(t.description.length > 30, t.name);
     assert.ok(t.inputSchema.properties.profile, t.name);

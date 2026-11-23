@@ -48,6 +48,7 @@ const readBody = (req) => new Promise((r) => { let s = ""; req.on("data", (c) =>
 export async function startFakeDashboard(root) {
   const kinds = await lib("hunt-message-kinds.mjs");
   const study = await lib("hunt-study.mjs");
+  const plan = await lib("hunt-study-plan.mjs");
   const statusCli = await lib("status-cli.mjs");
   const calls = [];
   // GET /api/profile/home: tests set `home` to the body to serve, or to { status, body } to fail.
@@ -94,6 +95,30 @@ export async function startFakeDashboard(root) {
       if (!next) return send(res, 400, { error: "bad op" });
       atomicJson(file, next);
       return send(res, 200, next);
+    }
+    if (req.url === "/api/profile/study-plan") {
+      // Same ops as the dashboard route, through the real lib; records `via` for the tests.
+      const dir = path.join(root, "data", "study");
+      const daysFile = path.join(dir, "days.md"), cardsFile = path.join(dir, "cards.jsonl");
+      const read = (f) => { try { return fs.readFileSync(f, "utf8"); } catch { return ""; } };
+      try {
+        let file = daysFile, text, result;
+        const d = read(daysFile);
+        if (body.op === "add_task") { const r = plan.addTask(d, body); text = r.md; result = { task: r.task }; }
+        else if (body.op === "update_task") { const r = plan.updateTask(d, body.task_id, body); text = r.md; result = { task: r.task }; }
+        else if (body.op === "archive_task" || body.op === "unarchive_task") { const r = plan.setArchived(d, body.task_id, body.op === "archive_task"); text = r.md; result = { task: r.task }; }
+        else if (body.op === "add_day") { const r = plan.addDay(d, body); text = r.md; result = { day: r.day }; }
+        else if (body.op === "update_day") { const r = plan.updateDay(d, body.day, body); text = r.md; result = { day: body.day, moved_to: r.moved_to }; }
+        else if (body.op === "add_cards") { const r = plan.addCards(read(cardsFile), body.cards); file = cardsFile; text = r.jsonl; result = { added: r.added, skipped: r.skipped }; }
+        else return send(res, 400, { error: `Unknown op "${body.op}".` });
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(file, text);
+        fs.appendFileSync(path.join(dir, "plan-edits.jsonl"), JSON.stringify({ via: body.via, op: body.op }) + "\n");
+        return send(res, 200, { ok: true, op: body.op, ...result });
+      } catch (e) {
+        if (e instanceof plan.PlanError) return send(res, 400, { error: e.message });
+        throw e;
+      }
     }
     if (req.url === "/api/profile/add-job") {
       if (body.url.includes("acme/1")) return send(res, 200, { status: "duplicate", reason: "same posting URL", match: { num: 1, company: "Acme Robotics", role: "Senior Backend Engineer", status: "Interview", url: "https://jobs.example.com/acme/1" } });

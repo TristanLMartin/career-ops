@@ -6,6 +6,7 @@ import { ProfileData, jobId } from "./data.mjs";
 import { dashboardPost, dashboardGetJson } from "./dashboard-client.mjs";
 import { localWhen, trackerLabel, parseTrackerRef } from "./format.mjs";
 import { evalTools } from "./eval-tools.mjs";
+import { studyTools } from "./study-tools.mjs";
 
 const k = (n) => `$${Math.round(n / 1000)}k`;
 const clip = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
@@ -393,6 +394,8 @@ function studyOut(s) {
  */
 // Evaluation runs (the only tools that spend): src/eval-tools.mjs.
 Object.assign(TOOLS, evalTools({ profileArg, jobIndex }));
+// Study plan editing (writes through the dashboard): src/study-tools.mjs.
+Object.assign(TOOLS, studyTools({ profileArg }));
 
 export function registerTools(server, { config, onCall = () => {} }) {
   for (const [name, t] of Object.entries(TOOLS)) {

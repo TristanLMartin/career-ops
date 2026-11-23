@@ -104,6 +104,11 @@ Every tool takes an optional `profile` (a profile id from your config; default: 
 | `evaluate_jobs(job_ids? \| filter?, model: sonnet-lite\|opus-full, max_spend_usd, two_pass?: {threshold, model}, confirm?)` | Starts a recorded, capped evaluation run (default filter = the profile's target filters, highest quick score first); returns `run_id`, job count, estimate. Over $10 needs `confirm` | `scripts/hunt-eval-run.mjs start` (spends) |
 | `get_eval_run(run_id, results_limit?)` | State, jobs done/total per pass, spend vs cap, results so far (4.0+ first) | read (`… status`) |
 | `list_eval_runs(limit?)` | Recent runs, newest first, with each run's top 5 | read (`… list`) |
+| `get_study_plan(from_day?, to_day?, include_fast_track?)` | Every study day: number, title, theme, section, tasks (id, type, text, star, done; archived ones flagged) | read |
+| `add_study_task(day, type?, text, star?, position?)` / `update_study_task(task_id, text?, type?, star?, day?, position?)` | Add, edit or move a task; type is free text; ids and done state never change | `POST /api/profile/study-plan` |
+| `archive_study_task(task_id)` / `unarchive_study_task(task_id)` | Hide or restore a task (no delete) | `POST /api/profile/study-plan` |
+| `add_study_day(after_day, theme or title, section?)` / `update_study_day(day, theme?, title?, section?)` | Insert, rename or move a day; later days renumber, tasks keep ids and done state | `POST /api/profile/study-plan` |
+| `add_study_cards(cards[{front, back, tags?}])` | Append flashcards to the Study deck, skipping fronts already there | `POST /api/profile/study-plan` |
 
 ## Auth and logs
 
