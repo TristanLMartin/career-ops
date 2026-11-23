@@ -34,7 +34,7 @@ export function rankCaption(settings, { tournament = true } = {}) {
   const names = [...new Set(Object.entries(settings.locationScores).filter(([, v]) => v >= top - 5).map(([k]) => TIER_NAMES[k]).filter(Boolean))];
   const where = names.length ? ` (${names.join("/")} first)` : "";
   void tournament; // the head-to-head is only a last tie-break now
-  return `Best overall: your ratings first, then career-ops fit band (Strong apply, Apply, Maybe), then pay and location${where}. # is always this rank.`;
+  return `Best overall: your ratings first, then the 1-5 score (Sonnet's decimal once judged), then pay and location${where}. # is always this rank.`;
 }
 
 export function rankable(e) {
@@ -120,17 +120,25 @@ export function stretchLabel(e) {
  * report says is above your level drops a full tier (-2, levelDrop). Posting age does not count.
  */
 export function tierUnits(e) {
-  return fitTier(e.fit) * 2 + (e.rankBoost ? 1 : 0) - (levelDrop(e) ? 2 : 0);
+  return fitTier(scoreOf(e)) * 2 + (e.rankBoost ? 1 : 0) - (levelDrop(e) ? 2 : 0);
+}
+
+/**
+ * The job's one 1-5 score: the Haiku quick score, replaced by the
+ * Sonnet / deep-dive decimal once the job is judged. null when it has neither.
+ */
+export function scoreOf(e) {
+  return typeof e?.fit === "number" ? e.fit : typeof e?.quick_score === "number" ? e.quick_score : null;
 }
 
 /**
  * The Best overall order as a tuple, compared left to right, higher first:
  *   1. your rating tier: 4-5 above everything (5 before 4), 1-2 below everything, 3 or unrated neutral
- *   2. evaluated (career-ops fit score) above unevaluated
- *   3. evaluated: fit tier (see fitTier/tierUnits: favorites +half a tier, Staff+ below the bar -1 tier),
- *      then TC band, then location tier, then
- *      fresher, then the exact fit, then the head-to-head place, then exact pay
- *      unevaluated: quick score (triage only), then TC band, location, freshness
+ *   2. the score band of the job's one 1-5 score (scoreOf: quick score, or the judged decimal):
+ *      favorites +half a band, Staff+ below the bar -1 band (tierUnits)
+ *   3. the exact score (4.3 above 4.0; a quick 4 equals a judged 4.0; Staff below the bar -1)
+ *   4. then TC band, location tier, fresher, head-to-head place, exact pay
+ * Judged and unjudged jobs share one scale: an unjudged 5 ranks above a judged 4.3.
  * Missing pay is neutral (the $250k band).
  */
 export function overallTuple(e) {
@@ -140,10 +148,11 @@ export function overallTuple(e) {
   const pay = usd ?? NEUTRAL_PAY_USD;
   const band = payBand(usd);
   const h2h = e.h2h_rank != null && e.h2hVia !== "group" ? -e.h2h_rank : -100000;
-  if (typeof e.fit === "number") {
-    return [tier, 1, tierUnits(e), band, LOCATION_ORDER[e.locationTier] ?? 50, -(e.postedDays ?? 0), Math.round(e.fit * 10), h2h, pay, e.composite ?? 0];
-  }
-  return [tier, 0, typeof e.quick_score === "number" ? e.quick_score * 10 - (levelDrop(e) ? 10 : 0) : -1, band, LOCATION_ORDER[e.locationTier] ?? 50, -(e.postedDays ?? 0), 0, h2h, pay, e.composite ?? 0];
+  const score = scoreOf(e);
+  // The Staff rule keeps its old weight: a band down (tierUnits) and a point off the exact score,
+  // so an unjudged Staff 5 still ranks like a 4, as before the one-scale change.
+  const exact = score == null ? -1 : Math.round((score - (levelDrop(e) ? 1 : 0)) * 10);
+  return [tier, score == null ? -100 : tierUnits(e), exact, band, LOCATION_ORDER[e.locationTier] ?? 50, -(e.postedDays ?? 0), h2h, pay, e.composite ?? 0];
 }
 
 /** Best overall comparator (sorts best first). */

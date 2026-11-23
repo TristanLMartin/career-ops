@@ -17,8 +17,9 @@ const JOBS = {
   grp: job({ company: "H", h2h_rank: 3, h2hVia: "group", fit: 3.5, composite: 40 }),
 };
 
-test("Best overall: career-ops fit first (head-to-head no longer leads), then unevaluated by quick score", () => {
-  assert.deepEqual(rankedJobs(JOBS).map((e) => e.url), ["c", "b", "a", "g1", "grp", "d", "e"]);
+test("Best overall: one 1-5 score (quick, or the judged decimal), judged and unjudged on one scale", () => {
+  // d quick 5 > c 4.4 > b 4.0 = e quick 4 (tie: b's head-to-head place) > a 3.9 > g1 3.8 > grp 3.5
+  assert.deepEqual(rankedJobs(JOBS).map((e) => e.url), ["d", "c", "b", "e", "a", "g1", "grp"]);
 });
 
 test("closed jobs are not ranked; duplicate-group members share the leader's #", () => {
@@ -27,10 +28,11 @@ test("closed jobs are not ranked; duplicate-group members share the leader's #",
   assert.equal(m.get("g2"), m.get("g1"));
 });
 
-test("a job evaluated after the tournament ranks by its fit, never under unevaluated jobs", () => {
+test("an unjudged quick 5 ranks above a judged 4.4; a judged 4.4 above an unjudged 4", () => {
   const m = rankMap(JOBS);
-  assert.ok(m.get("c") < m.get("d"), "evaluated 4.4 above an unevaluated quick 5");
-  assert.equal(m.get("c"), 1);
+  assert.ok(m.get("d") < m.get("c"), "unjudged quick 5 above judged 4.4");
+  assert.ok(m.get("c") < m.get("e"), "judged 4.4 above unjudged quick 4");
+  assert.equal(m.get("d"), 1);
 });
 
 test("Home's order is a subsequence of the Jobs order, with the same numbers", () => {
@@ -77,7 +79,7 @@ test("the card line: fit or quick, short pay, place; one warning chip at most", 
   assert.equal(warningChip({}), null);
 });
 
-test("the caption: your ratings, then career-ops fit, then pay and location (preferred places named)", () => {
+test("the caption: your ratings, then the 1-5 score, then pay and location (preferred places named)", () => {
   const t = rankCaption(rankSettings({ location_scores: { 1: 100, 2: 100, 3: 50, 4: 20, 5: 70 } }));
-  assert.match(t, /^Best overall: your ratings first, then career-ops fit band \(Strong apply, Apply, Maybe\), then pay and location \(Seattle\/remote first\)/);
+  assert.match(t, /^Best overall: your ratings first, then the 1-5 score \(Sonnet's decimal once judged\), then pay and location \(Seattle\/remote first\)/);
 });

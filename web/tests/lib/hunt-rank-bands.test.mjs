@@ -19,13 +19,13 @@ test("TC bands: $400k+, $300-400k, $250-300k, $200-250k, <$200k; missing pay is 
   assert.equal(payBand(null), payBand(250e3));
 });
 
-test("inside one band, pay beats a 0.1-0.3 fit gap (the SentiLink case)", () => {
+test("the exact score beats pay inside a band (the 1-5 decides; pay only breaks exact ties)", () => {
   const jobs = {
     sentilink: job({ company: "SentiLink", fit: 4.3, tc_est: { usd: 200000 } }),
     openai: job({ company: "OpenAI", fit: 4.0, tc_est: { usd: 821000 } }),
     mid: job({ company: "Mid", fit: 4.2, tc_est: { usd: 320000 } }),
   };
-  assert.deepEqual(order(jobs), ["openai", "mid", "sentilink"]);
+  assert.deepEqual(order(jobs), ["sentilink", "mid", "openai"]);
 });
 
 test("a higher band still wins over pay", () => {
@@ -113,4 +113,15 @@ test("In progress lane: Applied through Offer only, furthest stage first, rows w
     { n: "7", status: "Speculative", updated: "2026-11-21" },
   ];
   assert.deepEqual(inProgress(rows).map((r) => r.n), ["55", "54", "9", "2"]);
+});
+
+test("the Staff rule keeps its old weight on one scale: a Staff quick 5 ranks like a quick 4, below a judged 4.4", () => {
+  const jobs = {
+    staff5: job({ company: "S", quick_score: 5, role: "Staff Software Engineer", level: { key: "staff", factor: 0.45 } }),
+    judged44: job({ company: "J", fit: 4.4 }),
+    quick4: job({ company: "Q", quick_score: 4, h2h_rank: 1 }),
+  };
+  const o = order(jobs);
+  assert.ok(o.indexOf("judged44") < o.indexOf("staff5"), o.join(","));
+  assert.ok(o.indexOf("quick4") < o.indexOf("staff5"), o.join(",")); // equal 4.0, quick4 wins its head-to-head tie
 });

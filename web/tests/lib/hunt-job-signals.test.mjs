@@ -59,10 +59,11 @@ test("Best overall: rating 4-5 on top (5 first), 3 neutral, 1-2 at the bottom", 
     meh: job({ company: "M", fit: 4.8, my_rating: 2 }),
     unscored: job({ company: "U", quick_score: 5 }),
   };
-  assert.deepEqual(rankedJobs(jobs).map((e) => e.url), ["five", "four", "best", "three", "unscored", "meh"]);
+  // unscored's quick 5 outranks best's judged 4.6: one 1-5 scale
+  assert.deepEqual(rankedJobs(jobs).map((e) => e.url), ["five", "four", "unscored", "best", "three", "meh"]);
 });
 
-test("Best overall: fit band first; within a band, TC band, then location, then freshness; head-to-head only breaks ties", () => {
+test("Best overall: the 1-5 score first (exact); equal scores by TC band, then location, then freshness; head-to-head only breaks ties", () => {
   const jobs = {
     h2hTop: job({ company: "H", fit: 3.9, h2h_rank: 1, tc_est: { usd: 600000 } }),
     better: job({ company: "B", fit: 4.1 }),
@@ -72,9 +73,9 @@ test("Best overall: fit band first; within a band, TC band, then location, then 
     staleHigh: job({ company: "S", fit: 4.0, tc_est: { usd: 420000 }, locationTier: 3, postedDays: 400 }),
     unscored: job({ company: "U", quick_score: 5, tc_est: { usd: 900000 } }),
   };
-  // better (4.1) and the 4.0s share the Apply band, so pay leads there; staleHigh (400 days) keeps its
-  // band (age alone never demotes) and only loses the freshness tie-break to highPay.
-  assert.deepEqual(rankedJobs(jobs).map((e) => e.url), ["highPay", "staleHigh", "noPay", "better", "lowPay", "h2hTop", "unscored"]);
+  // unscored (quick 5) > better (4.1) > the 4.0s, ordered among themselves by pay band (noPay = neutral
+  // $250k, between), staleHigh (400 days) losing only the freshness tie to highPay > h2hTop (3.9).
+  assert.deepEqual(rankedJobs(jobs).map((e) => e.url), ["unscored", "better", "highPay", "staleHigh", "noPay", "lowPay", "h2hTop"]);
   const tie = { x: job({ company: "X", fit: 4.0, h2h_rank: 9 }), y: job({ company: "Y", fit: 4.0, h2h_rank: 3 }) };
   assert.deepEqual(rankedJobs(tie).map((e) => e.url), ["y", "x"]);
 });
