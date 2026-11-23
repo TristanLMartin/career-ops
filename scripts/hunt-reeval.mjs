@@ -16,6 +16,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getCareerOpsRoot } from "../path-resolver.mjs";
+import { retryKind } from "../lib/hunt-batch-retry.mjs";
 import { evaluate, logUsage, withModelServer, live, chooseSpotchecks, runSpotchecks } from "./hunt-autoscore.mjs";
 import { loadYaml } from "../lib/yaml-document.mjs";
 import { exitOnHelp, requireSpendConsent } from "../lib/cli-guard.mjs";
@@ -76,19 +77,13 @@ try {
 // (default 15) until it clears, then carry on. A $0 failure with no tokens and no limit wording
 // is retried at most twice (it is usually the limit, sometimes a real failure). Gives up after
 // --limit-max-hours (default 6) of waiting.
-const LIMIT_RE = /usage limit|hit your (?:\w+ )?limit|limit (?:reached|exceeded)|rate.?limit|quota|\b429\b|overloaded|too many requests|resets? (?:at )?\d/i;
 const limitWaitMs = Number(arg("--limit-wait", 15)) * 60_000;
 const limitMaxMs = Number(arg("--limit-max-hours", 6)) * 3_600_000;
 let pausedUntil = 0, waitedMs = 0;
 const silentTries = new Map();
 let silentStreak = 0;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const retryable = (r) => {
-  if (r.last?.type === "done") return false;
-  const msg = String(r.last?.msg ?? "");
-  if (LIMIT_RE.test(msg)) return "limit";
-  return !(Number(r.last?.costUsd) > 0) && !(Number(r.last?.tokens) > 0) ? "silent" : false;
-};
+const retryable = (r) => retryKind(r.last); // lib/hunt-batch-retry.mjs
 
 batch({ state: "running", finishedAt: undefined });
 const queue = urls.filter((u) => !resumed.has(u));
