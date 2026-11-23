@@ -104,12 +104,14 @@ function scoreOfReport(root, n) {
 }
 
 /** Results of one pass so far: url -> { score, report, ok } for runs after `since` on `model`. */
-function passResults(root, urls, model, since) {
+// Only evaluations between `since` and `until` (the run's own window): a stopped run must not
+// show a later run's results for jobs that run picked up.
+function passResults(root, urls, model, since, until = null) {
   const prev = readJson(path.join(root, "data", "hunt-prev-fit.json"), {});
   const out = new Map();
   for (const u of urls) {
     const p = prev[u];
-    if (!p || p.reeval_model !== model || !p.reeval_at || p.reeval_at < since) continue;
+    if (!p || p.reeval_model !== model || !p.reeval_at || p.reeval_at < since || (until && p.reeval_at > until)) continue;
     out.set(u, { ok: p.reeval_ok === true, report: p.reeval_report ?? null, score: p.reeval_ok ? scoreOfReport(root, p.reeval_report) : null });
   }
   return out;
@@ -123,8 +125,9 @@ export function runStatus(root, id) {
   if (!m) return null;
   const p1 = MODELS[m.preset], p2 = m.twoPass ? MODELS[m.twoPass.model] : null;
   const b1 = liveBatch(root, `${id}-p1`), b2 = m.twoPass ? liveBatch(root, `${id}-p2`) : null;
-  const r1 = passResults(root, m.jobs.map((j) => j.url), p1.model, m.createdAt);
-  const r2 = p2 ? passResults(root, m.pass2Urls ?? [], p2.model, m.pass2StartedAt ?? m.createdAt) : new Map();
+  const until = m.finishedAt ?? null;
+  const r1 = passResults(root, m.jobs.map((j) => j.url), p1.model, m.createdAt, m.pass2StartedAt ?? until);
+  const r2 = p2 ? passResults(root, m.pass2Urls ?? [], p2.model, m.pass2StartedAt ?? m.createdAt, until) : new Map();
   const spent = money((b1?.costUsd ?? 0) + (b2?.costUsd ?? 0));
   const results = m.jobs.map((j) => {
     const a = r1.get(j.url), b = r2.get(j.url);

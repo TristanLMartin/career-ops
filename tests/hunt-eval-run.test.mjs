@@ -83,3 +83,18 @@ test("selectJobs: highest quick score first, a quick 1 is never picked", () => {
   fs.writeFileSync(f, JSON.stringify(doc));
   assert.deepEqual(selectJobs(root, { limit: 10 }).map((j) => j.company), ["Iota", "Delta"]);
 });
+
+test("runStatus: a stopped run never shows results a later run produced", () => {
+  const root = ws();
+  fs.mkdirSync(path.join(root, "data", "eval-runs"));
+  const base = { profile: "default", state: "stopped", preset: "sonnet-lite", twoPass: null, capUsd: 90, estimate: { total: 1 }, jobs: [{ id: "j1", url: "https://a/1", company: "Alpha", role: "A", rank: 1 }, { id: "j2", url: "https://d/4", company: "Delta", role: "D", rank: 2 }] };
+  fs.writeFileSync(path.join(root, "data", "eval-runs", "ev-old.json"), JSON.stringify({ ...base, id: "ev-old", createdAt: "2026-11-22T21:00:00.000Z", finishedAt: "2026-11-22T22:15:00.000Z" }));
+  fs.writeFileSync(path.join(root, "data", "hunt-prev-fit.json"), JSON.stringify({
+    "https://a/1": { reeval_model: "claude-sonnet-5-5", reeval_at: "2026-11-22T21:30:00.000Z", reeval_ok: true, reeval_report: 11 }, // this run
+    "https://d/4": { reeval_model: "claude-sonnet-5-5", reeval_at: "2026-11-23T03:30:00.000Z", reeval_ok: true, reeval_report: 12 }, // a later run
+  }));
+  fs.writeFileSync(path.join(root, "reports", "011-alpha-2026-11-22.md"), "**Score:** 4.1/5\n");
+  fs.writeFileSync(path.join(root, "reports", "012-delta-2026-11-22.md"), "**Score:** 4.2/5\n");
+  const s = runStatus(root, "ev-old");
+  assert.deepEqual(s.results.map((r) => r.company), ["Alpha"]);
+});
