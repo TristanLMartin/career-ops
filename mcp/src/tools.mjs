@@ -369,7 +369,7 @@ export const TOOLS = {
       const scan = await data.lastScanAt();
       const inbox = await data.pendingInboxCount();
       const cost = await data.weekCost();
-      lines.push(`Last scan ${scan ?? "never"} · ${inbox.toLocaleString("en-US")} in inbox · $${cost.toFixed(2)} AI spend this week`);
+      lines.push(`Last scan ${scan ?? "never"} · ${inbox.toLocaleString("en-US")} in inbox · $${cost.toFixed(2)} AI usage, last 7 days`);
       return lines.join("\n");
     },
   },

@@ -197,7 +197,7 @@ test("get_summary: needs / in flight / new come from the dashboard's /api/profil
   assert.match(text, /- #2 Globex · Platform Engineer \(Applied\)\n/);
   assert.match(text, /Today's study: /); // still read locally
   assert.match(text, new RegExp(`New since last look \\(1\\):\\n- #3 Hooli · Staff Engineer \\[${jobId("https://jobs.example.com/hooli/3")}\\]`));
-  assert.match(text, /· 1 in inbox · \$0\.00 AI spend this week/);
+  assert.match(text, /· 1 in inbox · \$0\.00 AI usage, last 7 days/);
   assert.ok(text.split("\n").length <= 30);
 });
 
