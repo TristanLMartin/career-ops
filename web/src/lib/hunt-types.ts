@@ -73,6 +73,10 @@ export type HuntEnrichment = {
   liveAt?: string;
   /** Posted USD base band tops out below config/ranking.yml base_floor. */
   belowFloor?: boolean;
+  /** Not full-time (lib/hunt-employment.mjs): its type and why. */
+  employment?: { type: string; why: string };
+  /** The profile excludes it (exclude_contract): not ranked, not listed, never picked. */
+  excluded?: string;
   /** The base_floor that belowFloor was judged against. */
   floor?: number;
   /** Location tier name from config/ranking.yml location_labels. */

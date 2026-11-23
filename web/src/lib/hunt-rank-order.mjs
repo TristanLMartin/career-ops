@@ -40,7 +40,8 @@ export function rankCaption(settings, { tournament = true } = {}) {
 export function rankable(e) {
   if (!e) return false;
   if (CLOSED.has(String(e.status ?? ""))) return false;
-  if (e.closed) return false; // the posting URL answered expired (data/hunt-liveness.json)
+  if (e.closed) return false;
+  if (e.excluded) return false; // the profile excludes it (exclude_contract: not full-time) // the posting URL answered expired (data/hunt-liveness.json)
   if (/^(skip|discard)/i.test(String(e.report?.decision ?? ""))) return false;
   return (e.h2h_rank != null && e.h2hVia !== "group") || typeof e.composite === "number";
 }

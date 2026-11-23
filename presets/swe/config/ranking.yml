@@ -24,6 +24,10 @@ tc_home: { factor: 1, basis_words: [] }
 # rows; without it, US-wide figures are used. levels_slugs fixes company names Levels.fyi spells
 # differently ("Board Name": levels-fyi-slug, or null to skip a company).
 levels: { home_location: null }
+
+# Only full-time roles: true drops contract, contract-to-hire, part-time, temporary, freelance and
+# internship postings (lib/hunt-employment.mjs) from the ranking, the Jobs list and every Sonnet pick.
+exclude_contract: false
 levels_slugs: {}
 base_floor: null          # posted max base below this = "below floor" (pay 0, never Shortlisted)
 currency: USD

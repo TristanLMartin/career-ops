@@ -29,6 +29,7 @@ import { readPerson } from "../lib/profile-paths.mjs";
 import { updateFirstSeen } from "../lib/hunt-first-seen.mjs";
 import { loadCompDoc, compFor, confidenceAtLeast, tcScore, companyScore, normCompany, DEFAULT_TC_BAND } from "../lib/hunt-comp.mjs";
 import { loadLevelsDoc, bestTcEstimate } from "../lib/hunt-levels.mjs";
+import { employmentType } from "../lib/hunt-employment.mjs";
 import { exitOnHelp } from "../lib/cli-guard.mjs";
 
 const args = new Set(process.argv.slice(2));
@@ -85,7 +86,7 @@ export function loadRankingConfig(rootDir = root) {
   for (const [factor, names] of Object.entries(cfg.research_tier ?? {})) for (const n of names ?? []) researchTier.set(normCompany(n), Number(factor));
   const caution = new Set((cfg.caution_companies ?? []).map((c) => normCompany(c)));
   const locationLabels = Object.fromEntries(Object.entries(cfg.location_labels ?? {}).map(([k, v]) => [Number(k), String(v)]));
-  return { levelsHome: typeof cfg.levels?.home_location === "string" && cfg.levels.home_location.trim() ? cfg.levels.home_location.trim() : null, tcHome: { factor: Number(cfg.tc_home?.factor) > 0 ? Number(cfg.tc_home.factor) : 1, basis_words: [].concat(cfg.tc_home?.basis_words ?? []) }, mapFamiliesCfg: cfg.map_families ?? null, target: normalizeTarget(cfg.target), locationLabels, currency: String(cfg.currency ?? "USD"), profileRules: cfg.profile_rules ?? null, aliases, researchTier, caution, weights, band, level, shortlist: cfg.shortlist ?? null, companyBoost: cfg.company_boost ?? {}, tcBand, payBasis, locationScores, unverified, payMissing: Number.isFinite(Number(cfg.pay_missing_score)) && cfg.pay_missing_score != null ? Number(cfg.pay_missing_score) : null, baseFloor: Number(cfg.base_floor) > 0 ? Number(cfg.base_floor) : null };
+  return { levelsHome: typeof cfg.levels?.home_location === "string" && cfg.levels.home_location.trim() ? cfg.levels.home_location.trim() : null, tcHome: { factor: Number(cfg.tc_home?.factor) > 0 ? Number(cfg.tc_home.factor) : 1, basis_words: [].concat(cfg.tc_home?.basis_words ?? []) }, mapFamiliesCfg: cfg.map_families ?? null, target: normalizeTarget(cfg.target), locationLabels, currency: String(cfg.currency ?? "USD"), profileRules: cfg.profile_rules ?? null, aliases, researchTier, caution, weights, band, level, shortlist: cfg.shortlist ?? null, companyBoost: cfg.company_boost ?? {}, tcBand, payBasis, locationScores, unverified, payMissing: Number.isFinite(Number(cfg.pay_missing_score)) && cfg.pay_missing_score != null ? Number(cfg.pay_missing_score) : null, baseFloor: Number(cfg.base_floor) > 0 ? Number(cfg.base_floor) : null, excludeContract: cfg.exclude_contract === true };
 }
 
 const LEVEL_WORDS = new Set(["senior", "sr", "junior", "jr", "lead", "staff", "principal", "head", "manager", "director", "i", "ii", "iii", "associate", "the", "and", "of", "for"]);
@@ -329,7 +330,7 @@ async function boardTexts(board) {
 // ---- main --------------------------------------------------------------------
 
 export async function enrich() {
-  const { levelsHome, tcHome: { factor: tcHomeFactor }, mapFamiliesCfg, target, locationLabels, currency, profileRules, aliases, researchTier, caution, weights, band, level: levelCfg, shortlist: rankingShortlist, companyBoost: boosts, tcBand, payBasis, locationScores, unverified, payMissing, baseFloor } = loadRankingConfig();
+  const { levelsHome, tcHome: { factor: tcHomeFactor }, mapFamiliesCfg, target, locationLabels, currency, profileRules, aliases, researchTier, caution, weights, band, level: levelCfg, shortlist: rankingShortlist, companyBoost: boosts, tcBand, payBasis, locationScores, unverified, payMissing, baseFloor, excludeContract } = loadRankingConfig();
   // The profile's own rules (location tiers, relevance words, stretch domains).
   configureRankRules(profileRules);
   // No relevance words configured: relevance is the target-roles + CV-skills score instead.
@@ -515,6 +516,7 @@ export async function enrich() {
     const relevance = useV2 ? relevanceV2(roleForScoring, desc) : relevanceV1;
     const fit = fitByUrl.get(r.url) ?? null;
     const level = levelFit(roleForScoring, r.company, desc, levelCfg);
+    const employment = employmentType(roleForScoring, desc);
     const compEntry = compFor(r.company, compMap);
     const tcEst = techComp ? bestTcEstimate({ company: r.company, title: roleForScoring, levelKey: level.key, pay, locationTier: tier }, { levelsMap, compMap, homeLocation: levelsHome, homeFactor: tcHomeFactor }) : null;
     const useTc = payBasis === "tc" && tcEst && confidenceAtLeast(tcEst.confidence, "medium");
@@ -537,7 +539,11 @@ export async function enrich() {
       pay: pay ? { min: pay.min, max: pay.max, currency: pay.currency, period: pay.period, annualMin: pay.annualMin, annualMax: pay.annualMax, from: pay.from, basis: pay.basis, band: pay.band } : null,
       group: groupKey(r.company, roleForScoring),
       displayRole: hn ? roleForScoring : undefined,
-      contract: hn?.contract || undefined,
+      // Not full-time (contract, part-time, temporary, freelance, internship): lib/hunt-employment.mjs.
+      // With exclude_contract: true the job leaves the ranking, the Jobs list and every Sonnet pick.
+      contract: hn?.contract || Boolean(employment) || undefined,
+      employment: employment ?? undefined,
+      excluded: excludeContract && (hn?.contract || employment) ? "not full-time" : undefined,
       origin: originOf(r),
       channel: channelOf(r, originOf(r)),
       domains: relevanceDomains(desc),

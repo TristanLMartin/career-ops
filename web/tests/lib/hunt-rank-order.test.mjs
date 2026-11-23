@@ -83,3 +83,8 @@ test("the caption: your ratings, then the 1-5 score, then pay and location (pref
   const t = rankCaption(rankSettings({ location_scores: { 1: 100, 2: 100, 3: 50, 4: 20, 5: 70 } }));
   assert.match(t, /^Best overall: your ratings first, then the 1-5 score \(Sonnet's decimal once judged\), then pay and location \(home area\/remote first\)/);
 });
+
+test("a job the profile excludes (not full-time) is not ranked", () => {
+  const jobs = { ft: job({ company: "A", fit: 4.0 }), contract: job({ company: "B", fit: 4.8, excluded: "not full-time" }) };
+  assert.deepEqual(rankedJobs(jobs).map((e) => e.url), ["ft"]);
+});

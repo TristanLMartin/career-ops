@@ -64,7 +64,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
   const fitted = onInbox ? withInboxFit([...pending, ...scoredShortlist]) : null;
   if (fitted) {
     // hunt: a posting whose URL answered expired is Closed and leaves the Jobs list.
-    fitted.jobs = fitted.jobs.filter((job) => !enrich[job.url]?.closed).map((job) => {
+    fitted.jobs = fitted.jobs.filter((job) => !enrich[job.url]?.closed && !enrich[job.url]?.excluded).map((job) => {
       const e = enrich[job.url];
       if (!e) return { ...job, hunt: null };
       const pv = payValue(e, rankSet);
