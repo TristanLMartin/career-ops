@@ -77,7 +77,7 @@ export function InboxTriage({ inbox, rankCaption = null, judgedOnlyDefault = fal
   const [stars, setStars] = useState<string[]>([]);
   const [starredOnly, setStarredOnly] = useState(false);
   // Judged only: jobs Sonnet (or a deep dive) has scored; quick-score-only jobs hide. Starts on when ranking.yml sets jobs_judged_only.
-  const [judgedOnly, setJudgedOnly] = useState(judgedOnlyDefault);
+  const [scoreView, setScoreView] = useState<"judged" | "all" | "unjudged">(judgedOnlyDefault ? "judged" : "all");
   const [starError, setStarError] = useState("");
   useEffect(() => {
     let live = true;
@@ -247,7 +247,7 @@ export function InboxTriage({ inbox, rankCaption = null, judgedOnlyDefault = fal
         if (hidden.includes(e.job.url)) return false;
         if (companyF && !matchesCompany(e.job, companyF)) return false;
         if (starredOnly && !isStarred(starSet, e.job.company)) return false;
-        if (judgedOnly && typeof huntOf(e.job)?.fit !== "number") return false;
+        if (scoreView !== "all" && (typeof huntOf(e.job)?.fit === "number") !== (scoreView === "judged")) return false;
         if (within != null && (e.age == null || e.age > within)) return false;
         if (sources.size && (!e.source || !sources.has(e.source))) return false;
         if (seniorities.size && (!e.seniority || !seniorities.has(e.seniority))) return false;
@@ -255,7 +255,7 @@ export function InboxTriage({ inbox, rankCaption = null, judgedOnlyDefault = fal
         if (kw.trim() && !`${e.job.company} ${e.job.role}`.toLowerCase().includes(kw.trim().toLowerCase())) return false;
         return true;
       }),
-    [enriched, hidden, companyF, starredOnly, starSet, judgedOnly, within, sources, seniorities, locQ, kw],
+    [enriched, hidden, companyF, starredOnly, starSet, scoreView, within, sources, seniorities, locQ, kw],
   );
 
   // Fit order lives in core/inbox-rank.mjs. This is the only sort.
@@ -522,13 +522,17 @@ export function InboxTriage({ inbox, rankCaption = null, judgedOnlyDefault = fal
             ))}
             <span aria-hidden="true" className="text-border">|</span>
             {/* hunt: Starred only (a filter; stars never change the ranking) */}
-            <button type="button" aria-pressed={starredOnly} onClick={() => setStarredOnly((v) => !v)} title={stars.length ? `Starred: ${stars.join(", ")}` : "Star companies with the star on a job"} className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 max-sm:min-h-[44px] max-sm:justify-center", starredOnly ? "border-amber-500/60 bg-amber-500/10 font-medium text-foreground" : "border-border text-faint hover:text-foreground")}>
-              <span aria-hidden="true">{starredOnly ? "\u2605" : "\u2606"}</span> Starred only
+            <button type="button" aria-pressed={starredOnly} onClick={() => setStarredOnly((v) => !v)} title={stars.length ? `Jobs at your starred companies: ${stars.join(", ")}` : "Star a company with the star next to its name on any job"} className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 max-sm:min-h-[44px] max-sm:justify-center", starredOnly ? "border-amber-500/60 bg-amber-500/10 font-medium text-foreground" : "border-border text-faint hover:text-foreground")}>
+              <span aria-hidden="true">{starredOnly ? "\u2605" : "\u2606"}</span> Starred companies
             </button>
             {/* Judged only: only jobs with a Sonnet / deep-dive score */}
-            <button type="button" aria-pressed={judgedOnly} onClick={() => setJudgedOnly((v) => !v)} title={judgedOnly ? "Showing only jobs Sonnet has judged. Click to also show quick-score-only jobs." : "Showing every job. Click to show only Sonnet-judged jobs."} className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 max-sm:min-h-[44px] max-sm:justify-center", judgedOnly ? "border-brand/50 bg-brand/10 font-medium text-foreground" : "border-border text-faint hover:text-foreground")}>
-              {judgedOnly ? "Judged only" : "All scores"}
-            </button>
+            <span role="group" aria-label="Which scores to show" className="inline-flex items-center overflow-hidden rounded-full border border-border">
+              {(["judged", "all", "unjudged"] as const).map((v) => (
+                <button key={v} type="button" aria-pressed={scoreView === v} onClick={() => setScoreView(v)} title={{ judged: "Only jobs Sonnet (or a deep dive) has judged", all: "Every job", unjudged: "Only jobs with just a Haiku quick score" }[v]} className={cn("px-2.5 py-0.5 max-sm:min-h-[44px]", scoreView === v ? "bg-brand/10 font-medium text-foreground" : "text-faint hover:text-foreground")}>
+                  {{ judged: "Judged", all: "All", unjudged: "Unjudged" }[v]}
+                </button>
+              ))}
+            </span>
             <span aria-hidden="true" className="text-border">|</span>
             <button
               type="button"

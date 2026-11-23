@@ -39,14 +39,14 @@ export function StarButton({ company, starred, onToggle, className }: { company:
     const saved = await postStar(company, !on);
     if (!saved) { setOwn(on); setFailed(true); }
   };
-  const label = on ? `Unstar ${company}` : `Star ${company}`;
+  const label = on ? `Unstar the company ${company}` : `Star the company ${company} (all its jobs)`;
   return (
     <button
       type="button"
       onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); void toggle(); }}
       aria-pressed={on}
       aria-label={label}
-      title={failed ? "Couldn't save the star; try again" : on ? `${company} is starred (filter only, no ranking effect)` : `Star ${company}`}
+      title={failed ? "Couldn't save the star; try again" : on ? `${company} is a starred company: all its jobs show under Starred companies. Click to unstar.` : `Star the company ${company}: all its jobs show under Starred companies`}
       className={cn("tap-44 inline-flex size-5 shrink-0 items-center justify-center rounded text-faint hover:text-amber-800 dark:hover:text-amber-400", on && "text-amber-800 dark:text-amber-400", failed && "text-red-700 dark:text-red-400", className)}
     >
       <Star className="size-4" fill={on ? "currentColor" : "none"} />
