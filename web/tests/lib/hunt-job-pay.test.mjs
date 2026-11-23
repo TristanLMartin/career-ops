@@ -33,14 +33,19 @@ test("payLine: posted band and estimate on one line (#57)", () => {
   const p = payLine(snowRow);
   assert.equal(p.kind, "both");
   assert.equal(p.posted, "Base $200k–$288k · posted");
-  assert.equal(p.estimated, "Est. total comp ~$517k · levels.fyi, IC3 (Senior SWE)");
-  assert.equal(p.text, "Base $200k–$288k · posted · Est. total comp ~$517k · levels.fyi, IC3 (Senior SWE)");
+  assert.equal(p.estimated, "Est. total comp ~$517k · older research, IC3 (Senior SWE)");
+  assert.equal(p.text, "Base $200k–$288k · posted · Est. total comp ~$517k · older research, IC3 (Senior SWE)");
 });
 
 test("payLine: estimate only, low confidence is labeled", () => {
   const p = payLine({ tc_est: { usd: 300000, confidence: "low", levelEquiv: null } });
   assert.equal(p.kind, "estimated");
-  assert.equal(p.text, "Est. total comp ~$300k · levels.fyi (low confidence)");
+  assert.equal(p.text, "Est. total comp ~$300k · older research (low confidence)");
+});
+
+test("payLine: Levels.fyi per-level data names its city and level", () => {
+  const p = payLine({ tc_est: { usd: 300000, confidence: "high", source: "levels.fyi (Greater Austin Area, Lead MTS)", level: "Lead MTS", levelEquiv: "Lead MTS" } });
+  assert.equal(p.estimated, "Est. total comp ~$300k · levels.fyi, Greater Austin Area, Lead MTS");
 });
 
 test("payLine: OTE, hourly and non-USD bands keep their basis", () => {

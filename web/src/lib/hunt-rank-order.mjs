@@ -15,6 +15,7 @@
  * except a member with its own 4.0+ evaluation, which is ranked on its own.
  */
 
+import { tcSourceLabel } from "./hunt-tc-label.mjs";
 import { staleChip } from "./hunt-job-signals.mjs";
 import { SCORE_BANDS, bandForScore } from "./core/score-action.mjs";
 
@@ -299,7 +300,7 @@ export function payCell(e) {
   const base = pp.hourly ? (pp.annual ? `${pp.annual}/yr hourly` : `${pp.base} hourly`) : pp.base ? `${pp.base}${pp.ote ? " OTE" : ""}` : null;
   const title = [
     pp.hourly ? `Hourly ${pp.base}${pp.annual ? `, annualized ~${pp.annual}/yr` : ""}, posted` : pp.base ? `${pp.ote ? "OTE" : "Base"} ${pp.base}, posted` : null,
-    pp.tc ? `Est. total comp ${pp.tc.replace(" TC", "")} (levels.fyi-style)` : null,
+    pp.tc ? `Est. total comp ${pp.tc.replace(" TC", "")} (${tcSourceLabel(e.tc_est) || "estimate"})` : null,
   ].filter(Boolean).join(" · ");
   return { base: base ?? (pp.tc ? null : "—"), tc: pp.tc, sortUsd: pp.sortUsd, title: title || "Pay not listed" };
 }

@@ -57,8 +57,8 @@ export type HuntEnrichment = {
   displayRole?: string;
   contract?: boolean;
   parts: Record<"fit" | "relevance" | "pay" | "location" | "benefits" | "level", number | null> & { company?: number | null };
-  /** Estimated total comp from config/comp.json (company senior TC, scaled by this posting's base). */
-  tc_est?: { usd: number; rankUsd: number; basis: string; confidence: "low" | "medium" | "high"; range: [number, number] | null; equityType: string | null; levelEquiv?: string | null; privateEquity: boolean; homeAdjusted: boolean; source: string };
+  /** Estimated total comp: Levels.fyi's median at this posting's company level (lib/hunt-levels.mjs), else the research table (config/comp.json). */
+  tc_est?: { usd: number; rankUsd: number; basis: string; confidence: "low" | "medium" | "high"; range: [number, number] | null; equityType: string | null; levelEquiv?: string | null; privateEquity: boolean; homeAdjusted: boolean; source: string; level?: string; levelHow?: string; where?: string; parts?: { base: number; stock: number; bonus: number }; fetchedAt?: string | null };
   /** hunt: board posting date (YYYY-MM-DD) and its age in days (hunt-job-signals.mjs). */
   postedAt?: string;
   postedDays?: number;
@@ -186,7 +186,7 @@ export function rankValue(e: HuntEnrichment | null | undefined, key: HuntRankKey
   return e.parts?.[key] ?? null;
 }
 
-/** "base $X–Y · est. TC ~$Z (levels.fyi-style estimate, confidence)", or just the base. */
+/** "base $X–Y · est. TC ~$Z (source, confidence)", or just the base. */
 export function formatPayWithTc(pay: HuntPay | null | undefined, tc: HuntEnrichment["tc_est"]): string | null {
   const base = formatPay(pay);
   const est = tc ? `est. TC ~$${Math.round(tc.usd / 1000)}k (${[`${tc.confidence} confidence`, tc.privateEquity ? "private equity" : null].filter(Boolean).join(", ")})` : null;

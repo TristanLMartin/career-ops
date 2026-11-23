@@ -1,9 +1,10 @@
 // hunt: pay line and single verdict for the job detail page.
 //
-// Pay is read, never computed here: the posted band and the levels.fyi-style TC estimate
+// Pay is read, never computed here: the posted band and the TC estimate (Levels.fyi data or the research table)
 // both come from data/hunt-enrich.json, written by scripts/hunt-enrich.mjs (the same
 // numbers the ranking uses). This module only finds the row and formats it.
 
+import { tcSourceLabel } from "./hunt-tc-label.mjs";
 import { normalizeUrl } from "./core/url-key.mjs";
 import { APPLY_LINE, flaggedPosting, legitimacyTone } from "./report-sections.mjs";
 
@@ -122,9 +123,8 @@ export function payLine(row) {
   let estimated = null;
   const tc = row?.tc_est;
   if (tc && Number.isFinite(tc.usd) && tc.usd > 0) {
-    const level = tc.levelEquiv ? `, ${tc.levelEquiv}` : "";
     const low = tc.confidence === "low" ? " (low confidence)" : "";
-    estimated = `Est. total comp ~${money(tc.usd)} · levels.fyi${level}${low}`;
+    estimated = `Est. total comp ~${money(tc.usd)} · ${tcSourceLabel(tc)}${low}`;
   }
 
   const kind = posted && estimated ? "both" : posted ? "posted" : estimated ? "estimated" : "none";

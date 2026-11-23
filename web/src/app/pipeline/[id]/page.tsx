@@ -36,7 +36,7 @@ export default async function ReportPage({ params, searchParams }: {
   const reportNum = reportNumberFor(id, app, report?.file ?? null);
   const disk = await readCvDiskState(id, companyName, (app?.pdf ?? "").includes("✅"), reportNum);
   const pdfFileReady = disk.exists;
-  // hunt: pay line from the ranking's own data (posted band + levels.fyi-style TC estimate).
+  // hunt: pay line from the ranking's own data (posted band + TC estimate).
   const reportUrl = parseReport(report?.content ?? "").fields.find((f) => f.label === "URL")?.value;
   const enrichJobs = readHuntEnrichment().jobs;
   const row = findEnrichRow(enrichJobs, { urls: [reportUrl, app?.url, app?.applyLink], tracker: app?.n ?? null });

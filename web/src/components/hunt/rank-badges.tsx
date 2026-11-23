@@ -4,6 +4,7 @@
 import { Badge } from "@/components/ui/badge";
 import { BENEFIT_LABELS, LOCATION_TIER_LABEL, formatPayWithTc, type HuntBenefits, type HuntEnrichment } from "@/lib/hunt-types";
 import { fitLabel, placeLabel, ratingLabel, shortPay, stretchLabel, warningChip } from "@/lib/hunt-rank-order.mjs";
+import { tcExplain } from "@/lib/hunt-tc-label.mjs";
 
 function tone(v: number | null | undefined): "good" | "warn" | "bad" | "muted" {
   if (v == null) return "muted";
@@ -86,7 +87,7 @@ export function RankDetails({ e }: { e: HuntEnrichment | null | undefined }) {
         </Badge>
       )}
       {pay && (
-        <Badge tone="muted" title={`${e.pay?.basis === "OTE" ? "On-target earnings" : "Base salary"} ${e.pay?.band ? `(${e.pay.band}) ` : ""}from the ${e.pay?.from === "description" ? "job description" : "job board"}. ${e.tc_est ? ` Est. TC: company senior median${e.tc_est.levelEquiv ? ` (${e.tc_est.levelEquiv})` : ""} ${e.tc_est.basis === "company median" ? "(no posting base to scale by)" : "scaled by this posting's base"}${e.tc_est.homeAdjusted ? ", adjusted for your home metro" : ""}${e.tc_est.range ? `, range $${Math.round(e.tc_est.range[0] / 1000)}k–${Math.round(e.tc_est.range[1] / 1000)}k` : ""}${e.tc_est.equityType ? `, ${e.tc_est.equityType}` : ""}.${e.tc_est.privateEquity ? ` Private equity: ranked at ~$${Math.round(e.tc_est.rankUsd / 1000)}k with stock counted at 60%.` : ""}` : " Equity and bonus not included."} Rank uses ${e.payFrom === "tc" ? "est. TC" : "base"}.${lcaNote(e)}`}>
+        <Badge tone="muted" title={`${e.pay?.basis === "OTE" ? "On-target earnings" : "Base salary"} ${e.pay?.band ? `(${e.pay.band}) ` : ""}from the ${e.pay?.from === "description" ? "job description" : "job board"}. ${e.tc_est ? ` ${tcExplain(e.tc_est)}` : " Equity and bonus not included."} Rank uses ${e.payFrom === "tc" ? "est. TC" : "base"}.${lcaNote(e)}`}>
           {pay}
         </Badge>
       )}
