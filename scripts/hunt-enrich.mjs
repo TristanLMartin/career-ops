@@ -86,7 +86,7 @@ export function loadRankingConfig(rootDir = root) {
   for (const [factor, names] of Object.entries(cfg.research_tier ?? {})) for (const n of names ?? []) researchTier.set(normCompany(n), Number(factor));
   const caution = new Set((cfg.caution_companies ?? []).map((c) => normCompany(c)));
   const locationLabels = Object.fromEntries(Object.entries(cfg.location_labels ?? {}).map(([k, v]) => [Number(k), String(v)]));
-  return { levelsHome: typeof cfg.levels?.home_location === "string" && cfg.levels.home_location.trim() ? cfg.levels.home_location.trim() : null, tcHome: { factor: Number(cfg.tc_home?.factor) > 0 ? Number(cfg.tc_home.factor) : 1, basis_words: [].concat(cfg.tc_home?.basis_words ?? []) }, mapFamiliesCfg: cfg.map_families ?? null, target: normalizeTarget(cfg.target), locationLabels, currency: String(cfg.currency ?? "USD"), profileRules: cfg.profile_rules ?? null, aliases, researchTier, caution, weights, band, level, shortlist: cfg.shortlist ?? null, companyBoost: cfg.company_boost ?? {}, tcBand, payBasis, locationScores, unverified, payMissing: Number.isFinite(Number(cfg.pay_missing_score)) && cfg.pay_missing_score != null ? Number(cfg.pay_missing_score) : null, baseFloor: Number(cfg.base_floor) > 0 ? Number(cfg.base_floor) : null, excludeContract: cfg.exclude_contract === true };
+  return { levelsHome: typeof cfg.levels?.home_location === "string" && cfg.levels.home_location.trim() ? cfg.levels.home_location.trim() : null, tcHome: { factor: Number(cfg.tc_home?.factor) > 0 ? Number(cfg.tc_home.factor) : 1, basis_words: [].concat(cfg.tc_home?.basis_words ?? []) }, mapFamiliesCfg: cfg.map_families ?? null, target: normalizeTarget(cfg.target), locationLabels, currency: String(cfg.currency ?? "USD"), profileRules: cfg.profile_rules ?? null, aliases, researchTier, caution, weights, band, level, shortlist: cfg.shortlist ?? null, companyBoost: cfg.company_boost ?? {}, tcBand, payBasis, locationScores, unverified, payMissing: Number.isFinite(Number(cfg.pay_missing_score)) && cfg.pay_missing_score != null ? Number(cfg.pay_missing_score) : null, baseFloor: Number(cfg.base_floor) > 0 ? Number(cfg.base_floor) : null, excludeContract: cfg.exclude_contract === true, excludeBelowFloor: cfg.exclude_below_floor === true };
 }
 
 const LEVEL_WORDS = new Set(["senior", "sr", "junior", "jr", "lead", "staff", "principal", "head", "manager", "director", "i", "ii", "iii", "associate", "the", "and", "of", "for"]);
@@ -330,7 +330,7 @@ async function boardTexts(board) {
 // ---- main --------------------------------------------------------------------
 
 export async function enrich() {
-  const { levelsHome, tcHome: { factor: tcHomeFactor }, mapFamiliesCfg, target, locationLabels, currency, profileRules, aliases, researchTier, caution, weights, band, level: levelCfg, shortlist: rankingShortlist, companyBoost: boosts, tcBand, payBasis, locationScores, unverified, payMissing, baseFloor, excludeContract } = loadRankingConfig();
+  const { levelsHome, tcHome: { factor: tcHomeFactor }, mapFamiliesCfg, target, locationLabels, currency, profileRules, aliases, researchTier, caution, weights, band, level: levelCfg, shortlist: rankingShortlist, companyBoost: boosts, tcBand, payBasis, locationScores, unverified, payMissing, baseFloor, excludeContract, excludeBelowFloor } = loadRankingConfig();
   // The profile's own rules (location tiers, relevance words, stretch domains).
   configureRankRules(profileRules);
   // No relevance words configured: relevance is the target-roles + CV-skills score instead.
@@ -543,7 +543,8 @@ export async function enrich() {
       // With exclude_contract: true the job leaves the ranking, the Jobs list and every Sonnet pick.
       contract: hn?.contract || Boolean(employment) || undefined,
       employment: employment ?? undefined,
-      excluded: excludeContract && (hn?.contract || employment) ? "not full-time" : undefined,
+      // exclude_below_floor: a posted base band topping out under base_floor is hidden the same way.
+      excluded: excludeContract && (hn?.contract || employment) ? "not full-time" : excludeBelowFloor && belowFloor ? `below the ${Math.round((baseFloor ?? 0) / 1000)}k base floor` : undefined,
       origin: originOf(r),
       channel: channelOf(r, originOf(r)),
       domains: relevanceDomains(desc),

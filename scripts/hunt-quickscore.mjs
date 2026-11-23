@@ -79,9 +79,9 @@ export function logUsage(root, row) {
   fs.appendFileSync(file, [new Date().toISOString(), row.model, row.status, row.secs, row.tokens, row.cost, "", "", row.role, ""].map(clean).join("\t") + "\n");
 }
 
-/** Postings still without a quick score (inbox and tracker), best composite first. */
+/** Postings still without a quick score (inbox and tracker), best composite first. Jobs the profile excludes (not full-time, below the floor) are never scored. */
 export function pending(jobs, quick) {
-  return Object.entries(jobs).filter(([u]) => !quick[u]).sort((a, b) => (b[1].composite ?? 0) - (a[1].composite ?? 0));
+  return Object.entries(jobs).filter(([u, e]) => !quick[u] && !e?.excluded).sort((a, b) => (b[1].composite ?? 0) - (a[1].composite ?? 0));
 }
 
 export async function quickscore({ root = getCareerOpsRoot(), limit = Infinity, size = 20, parallel = 3, run = runClaude, log = () => {}, estimateOnly = false } = {}) {

@@ -28,6 +28,10 @@ levels: { home_location: null }
 # Only full-time roles: true drops contract, contract-to-hire, part-time, temporary, freelance and
 # internship postings (lib/hunt-employment.mjs) from the ranking, the Jobs list and every Sonnet pick.
 exclude_contract: false
+# A posted base band whose top is under base_floor is hidden the same way (ranking, Jobs list,
+# Sonnet and quick-score picks). Jobs with no posted pay stay. Pair it with portals.yml
+# salary_filter to drop such postings at scan time.
+exclude_below_floor: false
 levels_slugs: {}
 base_floor: null          # posted max base below this = "below floor" (pay 0, never Shortlisted)
 currency: USD
