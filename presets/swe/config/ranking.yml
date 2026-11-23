@@ -19,6 +19,12 @@ pay_missing_score: 35     # pay part for a role with no posted pay (null = leave
 # Comp-table figures are national; scale home-metro (tier 1) rows by this factor unless a comp row's
 # location_basis already names your metro (e.g. { factor: 0.9, basis_words: [Denver, Boulder] }).
 tc_home: { factor: 1, basis_words: [] }
+# Levels.fyi per-level TC (scripts/hunt-levels-refresh.mjs, cron job "levels"): set home_location to
+# a Levels.fyi location slug (e.g. greater-denver-area) to use your metro's figures for tier 1-2
+# rows; without it, US-wide figures are used. levels_slugs fixes company names Levels.fyi spells
+# differently ("Board Name": levels-fyi-slug, or null to skip a company).
+levels: { home_location: null }
+levels_slugs: {}
 base_floor: null          # posted max base below this = "below floor" (pay 0, never Shortlisted)
 currency: USD
 
