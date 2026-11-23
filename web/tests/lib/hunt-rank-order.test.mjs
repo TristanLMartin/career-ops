@@ -88,3 +88,8 @@ test("a job the profile excludes (not full-time) is not ranked", () => {
   const jobs = { ft: job({ company: "A", fit: 4.0 }), contract: job({ company: "B", fit: 4.8, excluded: "not full-time" }) };
   assert.deepEqual(rankedJobs(jobs).map((e) => e.url), ["ft"]);
 });
+
+test("rankSettings: jobs_judged_only sets the Jobs list default; off unless the profile asks", () => {
+  assert.equal(rankSettings({ jobs_judged_only: true }).judgedOnlyDefault, true);
+  assert.equal(rankSettings({}).judgedOnlyDefault, false);
+});

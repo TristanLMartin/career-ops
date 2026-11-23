@@ -25,7 +25,8 @@ const TIER_NAMES = { 1: "home area", 2: "remote", 3: "NYC/Chicago", 4: "other pl
 /** What the web needs from config/ranking.yml for the sorts and the caption. */
 export function rankSettings(cfg = {}) {
   const loc = Object.fromEntries(Object.entries(cfg?.location_scores ?? { 1: 100, 2: 100, 3: 50, 4: 20, 5: 60 }).map(([k, v]) => [Number(k), Number(v)]));
-  return { payBasis: cfg?.pay_basis === "tc" ? "tc" : "base", locationScores: loc };
+  // jobs_judged_only: the Jobs list starts on "Judged only" (Sonnet / deep-dive scored jobs).
+  return { payBasis: cfg?.pay_basis === "tc" ? "tc" : "base", locationScores: loc, judgedOnlyDefault: cfg?.jobs_judged_only === true };
 }
 
 /** "Best overall: jobs compared head-to-head on ... (home area/remote first)", for this profile. */

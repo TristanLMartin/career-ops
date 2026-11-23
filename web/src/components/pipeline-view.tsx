@@ -71,6 +71,7 @@ export function PipelineView({
   appRanks = {},
   appPay = {},
   rankCaption = null,
+  judgedOnlyDefault = false,
 }: {
   applications: Application[];
   inbox: InboxJob[] | null;
@@ -85,6 +86,8 @@ export function PipelineView({
   appPay?: Record<string, PayCell>;
   /** hunt: one line on how Best overall works, for this profile. */
   rankCaption?: string | null;
+  /** Start the Jobs list on "Judged only" (ranking.yml jobs_judged_only). */
+  judgedOnlyDefault?: boolean;
 }) {
   const hasCv = useMemo(() => new Set(cvRows), [cvRows]);
   const params = useSearchParams();
@@ -985,7 +988,7 @@ export function PipelineView({
               {inboxFitError && (
                 <p role="alert" className="mt-2 whitespace-pre-wrap text-xs text-red-500">{inboxFitError}</p>
               )}
-              <InboxTriage inbox={inbox} rankCaption={rankCaption} />
+              <InboxTriage inbox={inbox} rankCaption={rankCaption} judgedOnlyDefault={judgedOnlyDefault} />
               {inbox.length === 0 && <InboxEmpty tracked={visibleApplications.length} />}
             </>
           )}

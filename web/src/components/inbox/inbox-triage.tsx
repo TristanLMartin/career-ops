@@ -44,7 +44,7 @@ type UndoNotice = { label: string; fn: () => Promise<void>; busy?: boolean; erro
 // Default is the best 20 fits (never the full wall). Newest is a view toggle; "Make default" saves the choice per browser.
 // Free facets + Save/Skip narrow the list. Only "Score shortlist" spends tokens.
 /** rankCaption: one line on how Best overall works for this profile (lib/hunt-rank-order.mjs). */
-export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; rankCaption?: string | null }) {
+export function InboxTriage({ inbox, rankCaption = null, judgedOnlyDefault = false }: { inbox: InboxJob[]; rankCaption?: string | null; judgedOnlyDefault?: boolean }) {
   const router = useRouter();
   // hunt: ?company=X (from a company on /portals), with that entry's ATS boards as &board=.
   const params = useSearchParams();
@@ -76,6 +76,8 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
   // hunt: starred companies (a filter only, never a ranking boost), loaded from /api/profile/stars.
   const [stars, setStars] = useState<string[]>([]);
   const [starredOnly, setStarredOnly] = useState(false);
+  // Judged only: jobs Sonnet (or a deep dive) has scored; quick-score-only jobs hide. Starts on when ranking.yml sets jobs_judged_only.
+  const [judgedOnly, setJudgedOnly] = useState(judgedOnlyDefault);
   const [starError, setStarError] = useState("");
   useEffect(() => {
     let live = true;
@@ -245,6 +247,7 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
         if (hidden.includes(e.job.url)) return false;
         if (companyF && !matchesCompany(e.job, companyF)) return false;
         if (starredOnly && !isStarred(starSet, e.job.company)) return false;
+        if (judgedOnly && typeof huntOf(e.job)?.fit !== "number") return false;
         if (within != null && (e.age == null || e.age > within)) return false;
         if (sources.size && (!e.source || !sources.has(e.source))) return false;
         if (seniorities.size && (!e.seniority || !seniorities.has(e.seniority))) return false;
@@ -252,7 +255,7 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
         if (kw.trim() && !`${e.job.company} ${e.job.role}`.toLowerCase().includes(kw.trim().toLowerCase())) return false;
         return true;
       }),
-    [enriched, hidden, companyF, starredOnly, starSet, within, sources, seniorities, locQ, kw],
+    [enriched, hidden, companyF, starredOnly, starSet, judgedOnly, within, sources, seniorities, locQ, kw],
   );
 
   // Fit order lives in core/inbox-rank.mjs. This is the only sort.
@@ -521,6 +524,10 @@ export function InboxTriage({ inbox, rankCaption = null }: { inbox: InboxJob[]; 
             {/* hunt: Starred only (a filter; stars never change the ranking) */}
             <button type="button" aria-pressed={starredOnly} onClick={() => setStarredOnly((v) => !v)} title={stars.length ? `Starred: ${stars.join(", ")}` : "Star companies with the star on a job"} className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 max-sm:min-h-[44px] max-sm:justify-center", starredOnly ? "border-amber-500/60 bg-amber-500/10 font-medium text-foreground" : "border-border text-faint hover:text-foreground")}>
               <span aria-hidden="true">{starredOnly ? "\u2605" : "\u2606"}</span> Starred only
+            </button>
+            {/* Judged only: only jobs with a Sonnet / deep-dive score */}
+            <button type="button" aria-pressed={judgedOnly} onClick={() => setJudgedOnly((v) => !v)} title={judgedOnly ? "Showing only jobs Sonnet has judged. Click to also show quick-score-only jobs." : "Showing every job. Click to show only Sonnet-judged jobs."} className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 max-sm:min-h-[44px] max-sm:justify-center", judgedOnly ? "border-brand/50 bg-brand/10 font-medium text-foreground" : "border-border text-faint hover:text-foreground")}>
+              {judgedOnly ? "Judged only" : "All scores"}
             </button>
             <span aria-hidden="true" className="text-border">|</span>
             <button

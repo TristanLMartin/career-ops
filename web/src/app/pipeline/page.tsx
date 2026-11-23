@@ -110,6 +110,7 @@ export default async function PipelinePage({ searchParams }: { searchParams: Pro
         appRanks={appRanks}
         appPay={appPay}
         rankCaption={caption}
+        judgedOnlyDefault={rankSet.judgedOnlyDefault}
       />
     </Suspense>
   );

@@ -32,6 +32,8 @@ exclude_contract: false
 # Sonnet and quick-score picks). Jobs with no posted pay stay. Pair it with portals.yml
 # salary_filter to drop such postings at scan time.
 exclude_below_floor: false
+# true: the Jobs list starts on "Judged only" (jobs Sonnet or a deep dive has scored); one click shows all.
+jobs_judged_only: false
 levels_slugs: {}
 base_floor: null          # posted max base below this = "below floor" (pay 0, never Shortlisted)
 currency: USD
